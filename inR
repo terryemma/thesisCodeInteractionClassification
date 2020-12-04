@@ -1,0 +1,2555 @@
+#libraries necessary to run this script
+library(jsonlite)
+library(dplyr)
+library(rlist)
+library(tibble)
+library(tidyr)
+
+#loading the json files into one list of dataframes
+#REMEMBER TO INFER HOW YOU DID THIS
+#CODE BELOW IS NOT HOW IT DID THIS
+#json_files <- list.files(pattern = "*.json")
+#for(i in length(json_files)){
+#  yelp <- fromJSON(json_files[i])
+#}
+
+######################### PART CANDIDATES ######################################
+
+#appending the part candidates of different videos into one dataframe
+#each row is now one video
+#each column contrains one part candidate
+#the column names refer to the particular part candidate
+#Keep in mind that one cell can refer to multiple persons
+df_part_candidates <- data.frame(json_data[[1]]$part_candidates)
+
+for (i in 2:300){
+  part_candidates <- data.frame( json_data[[i]]$part_candidates)
+  df_part_candidates <- rbind(df_part_candidates, part_candidates)
+  rm(part_candidates)
+}
+
+#removing columns from the part candidates datalist that will not be used
+df_part_candidates <- df_part_candidates %>%
+  select(-c(X10, X11, X13, X14, X19, X20, X21, X22, X23, X24))%>%
+  rename(Nose = X0) %>%
+  rename(Neck = X1) %>%
+  rename(Shoulder = X2) %>%
+  rename(RElbow = X3) %>%
+  rename(RWrist = X4) %>%
+  rename(LShoulder = X5) %>%
+  rename(LElbow = X6) %>%
+  rename(LWrist = X7) %>%
+  rename(MidHip = X8) %>%
+  rename(RHip = X9) %>%
+  rename(LHip = X12) %>%
+  rename(REye = X15) %>%
+  rename(LEye = X16) %>%
+  rename(REar = X17) %>%
+  rename(LEar = X18)
+
+############################ body part dataset #################################
+
+#appending the per person results of different videos into one dataframe
+df_people <- data.frame(json_data[[1]]$people)
+
+for (i in 2:300){
+  people <- data.frame(json_data[[i]]$people)
+  df_people <- rbind(df_people, people)
+  rm(people)
+}
+
+#appending the ID's for the people belonging to each video to the people
+#data frame
+#those with similar ID's belong to the same frame
+df_nr_people <- data.frame(1)
+df_nr_people <- rbind(df_nr_people,(1))
+
+for (i in 2:300){
+  nr_people <- data.frame(length(json_data[[i]]$people$person_id))
+  for (j in 1:(length(json_data[[i]]$people$person_id))+1){
+    df_nr_people <- rbind(df_nr_people, i)
+  }
+}
+
+#changing the column name of the dataframe df_nr_people
+names(df_nr_people)
+df_nr_people <- df_nr_people %>% 
+  rename(ID = X1)
+
+#adding the df_nr_people to df_people
+#removing the old person id column from the new dataframe
+#removing 3d columns since they don't apply to the data
+df_ID_people <-
+  cbind(df_nr_people ,df_people) %>%
+  select(-c(person_id, pose_keypoints_3d, face_keypoints_3d, 
+            hand_left_keypoints_3d, hand_right_keypoints_3d))
+colnames(df_ID_people)
+
+#split the body keypoints in separate columns
+#removing columns that will nog be used for this research
+df_ID_people <- df_ID_people %>% 
+  separate(pose_keypoints_2d, into = c("x_Nose", "y_Nose", "c_Nose", "x_Neck", 
+                                       "y_neck", "c_neck", "x_RShoulder", 
+                                       "y_RShoulder", "c_RShoulder", "x_RElbow", 
+                                       "y_RElbow", "c_RElbow", "x_RWrist", 
+                                       "y_RWrist", "c_RWrist", "x_LShoulder", 
+                                       "y_LShoulder", "c_LShoulder", "x_LElbow", 
+                                       "y_LElbow", "c_LElbow", "x_LWrist", 
+                                       "y_LWrist", "c_LWrist", "x_MidHip", 
+                                       "y_MidHip", "c_MidHip", "x_RHip", 
+                                       "y_RHip", "c_RHip", "x_RKnee", "y_RKnee", 
+                                       "c_RKnee", "x_RAnkle", "y_RAnkle", 
+                                       "c_RAnkle", "x_LHip", "y_LHip", "c_LHip", 
+                                       "x_LKnee", "y_LKnee", "c_LKnee",
+                                       "x_LAnkle", "y_LAnkle", "c_LAnkle", 
+                                       "x_REye", "y_REye", "c_REye", "x_LEye", 
+                                       "y_LEye", "c_LEye", "x_REar", "y_REar", 
+                                       "c_REar", "x_LEar", "y_LEar", "c_LEar")
+           ,sep = "([\\,])")
+
+#removing (, ) and c from the x_nose column
+df_ID_people$x_Nose <- stringr::str_replace(df_ID_people$x_Nose, '\\(', '')
+df_ID_people$x_Nose <- stringr::str_replace(df_ID_people$x_Nose, '\\c', '')
+
+#removing other columns of body parts that will not be used
+df_ID_people <- df_ID_people %>%
+  select(-c(x_RKnee, y_RKnee, c_RKnee, x_RAnkle, y_RAnkle, c_RAnkle, x_LKnee,
+            y_LKnee, c_LKnee, x_LAnkle, y_LAnkle, c_LAnkle, ))
+
+#without the probabilities of the particular body parts being what they
+#are proposed to be
+df_ID_noC <- df_ID_people %>%
+  select(-c(c_Nose, c_neck, c_RShoulder, c_RElbow, c_RWrist, c_LShoulder,
+            c_LElbow, c_LWrist, c_MidHip, c_RHip, c_LHip, c_REye, c_LEye,
+            c_REar, c_LEar, hand_left_keypoints_2d, hand_right_keypoints_2d,
+            face_keypoints_2d)) %>%
+  mutate_if(is.character,as.numeric)
+
+
+
+################## Final cleaned dataset for computation #######################
+cleaned_body_parts <- df_ID_noC
+cleaned_test_bodyParts <- cleaned_body_parts
+rm(df_ID_noC)
+rm(df_ID_people)
+rm(df_nr_people)
+rm(df_people)
+rm(nr_people)
+
+###################### computations on final dataset ###########################
+
+####################### create the head feature ###############################
+#put the rows that will be used for the mean x head position in a DF
+x_head_vars <- data.frame(x_Nose = cleaned_body_parts$x_Nose, 
+                          x_REye = cleaned_body_parts$x_REye, 
+                          x_LEye = cleaned_body_parts$x_LEye,
+                          x_REar = cleaned_body_parts$x_REar,
+                          x_LEar = cleaned_body_parts$x_LEar,
+                          x_Neck = cleaned_body_parts$x_Neck)
+
+#put the rows that will be used for the mean y head position in a DF
+y_head_vars <- data.frame(y_Nose = cleaned_body_parts$y_Nose, 
+                          y_REye = cleaned_body_parts$y_REye, 
+                          y_LEye = cleaned_body_parts$y_LEye,
+                          y_REar = cleaned_body_parts$y_REar,
+                          y_LEar = cleaned_body_parts$y_LEar,
+                          y_neck = cleaned_body_parts$y_neck)
+
+#compute the mean x position over left, right eye and the nose per row
+head_mean <- cleaned_body_parts %>%
+  mutate(mean_x_head_pos = rowMeans(x_head_vars, na.rm = TRUE)) %>%
+  mutate(mean_y_head_pos = rowMeans(y_head_vars, na.rm = TRUE)) %>%
+  select(ID, mean_x_head_pos, mean_y_head_pos)
+
+# sanity check for the NA or NaN values
+head_mean[is.na(head_mean)] <- 0
+colSums(is.na(head_mean))
+
+# pull head_mean x and y from dataframe for calculations
+mean_x_head_pos_vec <- pull(head_mean, mean_x_head_pos) # for X
+mean_y_head_pos_vec <- pull(head_mean, mean_y_head_pos) # for y
+ID_vec <- pull(imputed_missing_df, ID)                  # for ID
+
+# save pulled body part columns as csv for python
+write.csv(mean_x_head_pos_vec, file = "mean_x_head_pos_vec.csv", row.names=FALSE)
+write.csv(mean_y_head_pos_vec, file = "mean_y_head_pos_vec.csv", row.names=FALSE)
+write.csv(ID_vec, file = "ID_vec.csv", row.names=FALSE)
+
+# import the files back into R after Py calculations
+# Minimum head position difference based on x and y
+head_min <- read.csv("head_difference.csv", header=FALSE)
+head_min <- as.data.frame(do.call(rbind, head_min))
+
+#delete unnecessary vectors and dataframes
+rm(head_mean)
+rm(x_head_vars)
+rm(y_head_vars)
+rm(mean_x_head_pos_vec)
+rm(mean_y_head_pos_vec)
+
+################ compute the wrist min difference R vs R #######################
+#new df for the wrist variables
+wrist_df <- cleaned_body_parts %>%
+  select(ID, x_RWrist, y_RWrist)
+
+# sanity check for the NA or NaN values
+wrist_df[is.na(wrist_df)] <- 0
+colSums(is.na(wrist_df))
+
+#Create vector per group
+xRWrist <- pull(wrist_df, x_RWrist) # for x_RWrist
+yRWrist <- pull(wrist_df, y_RWrist) # for y_RWrist
+
+#write a csv file for use in python 
+write.csv(xRWrist, file = "xRWrist.csv", row.names=FALSE) # for x_RWrist
+write.csv(yRWrist, file = "yRWrist.csv", row.names=FALSE) # for y_RWrist
+
+rm(xRWrist)
+rm(yRWrist)
+rm(wrist_df)
+
+# minimal absolute right wrist position difference where x and y are summed
+wristR_min <- read.csv("wristR_min.csv", header=FALSE)
+wristR_min <- as.data.frame(do.call(rbind, wristR_min))
+
+wristR_min <- wristR_min %>%
+  rename(wristR_minDif = V1)
+
+#################### schouder - elleboog feature ###############################
+elbow_shoulder_df <- cleaned_body_parts %>%
+  select(ID, y_RElbow, y_RShoulder, y_LElbow, y_LShoulder)
+
+elbow_shoulder_df <- elbow_shoulder_df %>%
+  group_by(ID) %>%
+  mutate(y_lElbow_lShoulder = y_LShoulder - y_LElbow) %>%
+  mutate(y_rElbow_rShoulder = y_RShoulder - y_RElbow)
+
+sum_size_yL <- elbow_shoulder_df %>%
+  group_by(ID) %>%
+  summarize(sumY_lElbow_lShoulder = sum(y_lElbow_lShoulder, na.rm = TRUE))
+
+sum_size_yR<- elbow_shoulder_df %>%
+  group_by(ID) %>%
+  summarize(sumY_RElbow_RShoulder = sum(y_rElbow_rShoulder, na.rm = TRUE))
+
+shoulder_elbow_R <- sum_size_yR$sumY_RElbow_RShoulder
+shoulder_elbow_L <- sum_size_yL$sumY_lElbow_lShoulder
+
+#for the right shoulder and elbow
+RshoudlerElbowDifference_sum <- as.data.frame(shoulder_elbow_R)
+RshoudlerElbowDifference_sum[RshoudlerElbowDifference_sum == 0] <- NA
+
+#for the left shoulder and elbow
+LshoudlerElbowDifference_sum <- as.data.frame(shoulder_elbow_L)
+LshoudlerElbowDifference_sum[LshoudlerElbowDifference_sum == 0] <- NA
+
+rm(elbow_shoulder_df)
+rm(sum_size_yL)
+rm(shoulder_elbow_R)
+rm(sum_size_yR)
+
+###################### neck - wrist feature ####################################
+wrist_neck_df <- cleaned_body_parts %>%
+  select(ID, x_Neck, y_neck, y_RWrist, x_RWrist)
+
+# here i replace NA values with their group mean value
+i <- wrist_neck_df %>%
+  group_by(ID) %>%
+  mutate(y_RWrist = ifelse(is.na(y_RWrist),
+                           mean(y_RWrist,na.rm=TRUE),
+                           y_RWrist)) %>%
+  mutate(y_neck = ifelse(is.na(y_neck),
+                           mean(y_neck,na.rm=TRUE),
+                           y_neck))
+
+# here i calculate the minimal absolute vertical difference between 
+# the neck and the wrist
+# replace NaN values with the mean of the right wrist column same for neck
+x <- i %>%
+  pull(y_RWrist)
+
+y <- i %>%
+  pull(y_neck)
+
+j <- mean(x, na.rm = TRUE)
+x[is.nan(x)] <- mean(j) 
+
+g <- mean(y, na.rm = TRUE)
+y[is.nan(y)] <- mean(g) 
+
+# subtract in absolute the new wrist r col (x) from the new neck col (y) and
+# calc its difference. Which is the minimal difference for each video between
+# a right wrist and neck and I stored it in the datafram i.
+YneckWristMinDistance <- i %>%
+  add_column(x) %>%
+  add_column(y) %>%
+  ungroup() %>%
+  mutate(difference = abs(y - x))%>%
+  group_by(ID) %>%
+  slice(which.min(difference))  %>%
+  ungroup() %>%
+  select(YwristR_neck_dif = difference)
+
+rm(x)
+rm(y)
+rm(j)
+rm(g)
+rm(i)
+  
+# here i calculate the minimal absolute horizontal difference between 
+# the neck and the wrist
+l <- wrist_neck_df %>%
+  mutate(x_RWrist = ifelse(is.na(x_RWrist),
+                           mean(x_RWrist,na.rm=TRUE),
+                           x_RWrist)) %>%
+  mutate(x_Neck = ifelse(is.na(x_Neck),
+                         mean(x_Neck,na.rm=TRUE),
+                         x_Neck))
+x <- l %>%
+  pull(x_RWrist)
+
+y <- l %>%
+  pull(x_Neck)
+
+j <- mean(x, na.rm = TRUE)
+x[is.nan(x)] <- mean(j) 
+
+g <- mean(y, na.rm = TRUE)
+y[is.nan(y)] <- mean(g) 
+
+# subtract in absolute the new wrist r col (x) from the new neck col (y) and
+# call it difference. Which is the minimal difference for each video between
+# a right wrist and neck and I stored it in the datafram i.
+XneckWristMinDistance <- l %>%
+  add_column(x) %>%
+  add_column(y) %>%
+  ungroup() %>%
+  mutate(difference = abs(y - x))%>%
+  group_by(ID) %>%
+  slice(which.min(difference))  %>%
+  ungroup() %>%
+  select(XwristL_neck_dif = difference)
+
+XYneckWristMinDistance <- (XneckWristMinDistance + YneckWristMinDistance)
+
+rm(x)
+rm(y)
+rm(j)
+rm(g)
+rm(l)
+rm(wrist_neck_df)
+rm(XneckWristMinDistance)
+rm(YneckWristMinDistance)
+
+###################### shoulder - wrist feature ####################################
+###################### Y right shoulder right wrist 
+shoulder_wrist_df <- cleaned_body_parts %>%
+  select(ID, y_RShoulder, y_LShoulder, y_RWrist, y_LWrist)
+
+# here i replace NA values with their group mean value
+i <- shoulder_wrist_df %>%
+  group_by(ID) %>%
+  mutate(y_RWrist = ifelse(is.na(y_RWrist),
+                           mean(y_RWrist,na.rm=TRUE),
+                           y_RWrist)) %>%
+  mutate(y_RShoulder = ifelse(is.na(y_RShoulder),
+                         mean(y_RShoulder,na.rm=TRUE),
+                         y_RShoulder))
+
+# here i calculate the minimal absolute vertical difference between 
+# the neck and the wrist
+# replace NaN values with the mean of the right wrist column same for neck
+x <- i %>%
+  pull(y_RWrist)
+
+y <- i %>%
+  pull(y_RShoulder)
+
+j <- mean(x, na.rm = TRUE)
+x[is.nan(x)] <- mean(j) 
+
+g <- mean(y, na.rm = TRUE)
+y[is.nan(y)] <- mean(g) 
+
+# subtract in absolute the new wrist r col (x) from the new neck col (y) and
+# calc its difference. Which is the minimal difference for each video between
+# a right wrist and neck and I stored it in the datafram i.
+YRshoulderWristDiff<- i %>%
+  add_column(x) %>%
+  add_column(y) %>%
+  ungroup() %>%
+  mutate(difference = (x- y))%>%
+  group_by(ID) %>%
+  slice(which.min(difference))  %>%
+  ungroup() %>%
+  select(YRshoulderWristDiff = difference)
+
+rm(x)
+rm(y)
+rm(j)
+rm(g)
+rm(i)
+
+########################################## Y l shoulder l wrist 
+shoulder_wrist_df <- cleaned_body_parts %>%
+  select(ID, y_RShoulder, y_LShoulder, y_RWrist, y_LWrist)
+
+# here i replace NA values with their group mean value
+i <- shoulder_wrist_df %>%
+  group_by(ID) %>%
+  mutate(y_LWrist = ifelse(is.na(y_LWrist),
+                           mean(y_LWrist,na.rm=TRUE),
+                           y_LWrist)) %>%
+  mutate(y_LShoulder = ifelse(is.na(y_LShoulder),
+                              mean(y_LShoulder,na.rm=TRUE),
+                              y_LShoulder))
+
+# here i calculate the minimal absolute vertical difference between 
+# the neck and the wrist
+# replace NaN values with the mean of the right wrist column same for neck
+x <- i %>%
+  pull(y_LWrist)
+
+y <- i %>%
+  pull(y_LShoulder)
+
+j <- mean(x, na.rm = TRUE)
+x[is.nan(x)] <- mean(j) 
+
+g <- mean(y, na.rm = TRUE)
+y[is.nan(y)] <- mean(g) 
+
+# subtract in absolute the new wrist r col (x) from the new neck col (y) and
+# calc its difference. Which is the minimal difference for each video between
+# a right wrist and neck and I stored it in the datafram i.
+YLshoulderWristDiff<- i %>%
+  add_column(x) %>%
+  add_column(y) %>%
+  ungroup() %>%
+  mutate(difference = (x- y))%>%
+  group_by(ID) %>%
+  slice(which.min(difference))  %>%
+  ungroup() %>%
+  select(YLshoulderWristDiff = difference)
+
+rm(x)
+rm(y)
+rm(j)
+rm(g)
+rm(i)
+
+##########################  shoulder elbow angle ##############################
+# for the right elbow and right shoulder
+angles <- cleaned_body_parts %>%
+  select(ID, x_RShoulder, y_RShoulder, x_RElbow, y_RElbow, x_RWrist, y_RWrist)
+
+removed_angles <- complete.cases(angles)
+i <- bind_cols(ID = ID_vec, angles = removed_angles)
+
+i <- i %>%
+  group_by(ID) %>%
+  mutate(amount_true = sum(angles == TRUE)) %>%
+  mutate(amount_false = sum(angles == FALSE)) %>%
+  select(ID, amount_true, amount_false) %>%
+  distinct() %>%
+  filter(amount_true < 1)
+
+#computing the angle of a which should be the elbow
+# a = elbow
+# b = shoulder
+# c = wrist
+angles <- angles %>%
+  na.omit(angles) %>%
+  mutate(a = sqrt(((x_RShoulder - x_RWrist)^2) + ((y_RShoulder - y_RWrist)^2))) %>%
+  mutate(b = sqrt(((x_RElbow - x_RWrist)^2) + ((y_RElbow - y_RWrist)^2))) %>%
+  mutate(c = sqrt(((x_RElbow - x_RShoulder)^2) + ((y_RElbow - y_RShoulder)^2))) %>%
+  mutate(a2 = a^2) %>%
+  mutate(b2 = b^2) %>%
+  mutate(c2 = c^2) %>%
+  mutate(cosA = ((b2+c2-a2) / (2*b*c))) %>%
+  mutate(rad = acos(cosA)) %>%
+  mutate(angle_degrees = rad * (180/pi)) %>%
+  select(ID, angle_degrees)%>%
+  group_by(ID) %>%
+  slice(which.min(angle_degrees))
+  
+
+no_angles <- cleaned_body_parts %>%
+  select(ID) %>%
+  group_by(ID) %>%
+  distinct()
+
+no_angles <- no_angles[c(42, 100, 105, 111, 117, 122, 130, 133, 134, 136, 137, 
+                          142, 146, 151, 152, 153, 155, 161, 165, 167, 169, 
+                          176, 177, 180, 181, 182, 184, 187, 189, 199, 209, 
+                          222, 225, 233, 244, 246, 248, 250, 261, 262, 263, 
+                          266, 267, 272, 285),]
+
+no_angles['angle_degrees'] <- NA
+x<- rbind(angles, no_angles)
+x <- x %>%
+  arrange(ID) %>%
+  ungroup() %>%
+  select(RshoulderElbowAngle = angle_degrees)
+
+rShoulderElbowAngle <- x
+
+
+# for the left elbow and left shoulder
+angles <- cleaned_body_parts %>%
+  select(ID, x_LShoulder, y_LShoulder, x_LElbow, y_LElbow, x_LWrist, y_LWrist)
+
+removed_angles <- complete.cases(angles)
+i <- bind_cols(ID = ID_vec, angles = removed_angles)
+
+i <- i %>%
+  group_by(ID) %>%
+  mutate(amount_true = sum(angles == TRUE)) %>%
+  mutate(amount_false = sum(angles == FALSE)) %>%
+  select(ID, amount_true, amount_false) %>%
+  distinct() %>%
+  filter(amount_true < 1)
+
+#computing the angle of a which should be the elbow
+# a = elbow
+# b = shoulder
+# c = wrist
+angles <- angles %>%
+  na.omit(angles) %>%
+  mutate(a = sqrt(((x_LShoulder - x_LWrist)^2) + ((y_LShoulder - y_LWrist)^2))) %>%
+  mutate(b = sqrt(((x_LElbow - x_LWrist)^2) + ((y_LElbow - y_LWrist)^2))) %>%
+  mutate(c = sqrt(((x_LElbow - x_LShoulder)^2) + ((y_LElbow - y_LShoulder)^2))) %>%
+  mutate(a2 = a^2) %>%
+  mutate(b2 = b^2) %>%
+  mutate(c2 = c^2) %>%
+  mutate(cosA = ((b2+c2-a2) / (2*b*c))) %>%
+  mutate(rad = acos(cosA)) %>%
+  mutate(angle_degrees = rad * (180/pi)) %>%
+  select(ID, angle_degrees)%>%
+  group_by(ID) %>%
+  slice(which.min(angle_degrees))
+
+no_angles <- cleaned_body_parts %>%
+  select(ID) %>%
+  group_by(ID) %>%
+  distinct()
+
+no_angles <- no_angles[c(12, 17, 34, 43, 51, 52, 68, 73, 74, 85, 92, 94, 103, 
+                         104, 114, 115, 127, 132, 133, 142, 143, 151, 152, 153, 
+                         154, 155, 161, 165, 170, 171, 176, 177, 180, 181, 182, 
+                         183, 184, 185, 187, 192, 199, 200, 209, 220, 231, 233
+                         , 235, 236, 239, 241, 244, 248, 249, 250, 255, 259, 
+                         263, 265, 266, 277, 279),]
+
+no_angles['angle_degrees'] <- NA
+x<- rbind(angles, no_angles)
+x <- x %>%
+  arrange(ID) %>%
+  ungroup() %>%
+  select(lshoulderElbowAngle = angle_degrees)
+
+lShoulderElbowAngle <- x
+
+rm(angles)
+rm(no_angles)
+rm(i)
+rm(x)
+
+########################################## max X dif right shoulder right wrist 
+Xshoulder_Xwrist_max <- cleaned_body_parts %>%
+  select(ID, x_RShoulder, x_RWrist)
+
+# here i replace NA values with their group mean value
+i <- Xshoulder_Xwrist_max %>%
+  group_by(ID) %>%
+  mutate(x_RShoulder = ifelse(is.na(x_RShoulder),
+                           mean(x_RShoulder,na.rm=TRUE),
+                           x_RShoulder)) %>%
+  mutate(x_RWrist = ifelse(is.na(x_RWrist),
+                              mean(x_RWrist,na.rm=TRUE),
+                           x_RWrist))
+
+# here i calculate the minimal absolute vertical difference between 
+# the neck and the wrist
+# replace NaN values with the mean of the right wrist column same for neck
+x <- i %>%
+  pull(x_RShoulder)
+
+y <- i %>%
+  pull(x_RWrist)
+
+j <- mean(x, na.rm = TRUE)
+x[is.nan(x)] <- mean(j) 
+
+g <- mean(y, na.rm = TRUE)
+y[is.nan(y)] <- mean(g) 
+
+# subtract in absolute the new wrist r col (x) from the new neck col (y) and
+# calc its difference. Which is the minimal difference for each video between
+# a right wrist and neck and I stored it in the datafram i.
+Xshoulder_Xwrist_max <- i %>%
+  add_column(x) %>%
+  add_column(y) %>%
+  ungroup() %>%
+  mutate(difference = abs(x- y))%>%
+  group_by(ID) %>%
+  slice(which.max(difference))  %>%
+  ungroup() %>%
+  select(Xshoulder_Xwrist_max = difference)
+
+rm(x)
+rm(y)
+rm(j)
+rm(g)
+rm(i)
+
+########################################## max X dif left shoulder left wrist 
+XLshoulder_XLwrist_max <- cleaned_body_parts %>%
+  select(ID, x_LShoulder, x_LWrist)
+
+# here i replace NA values with their group mean value
+i <- XLshoulder_XLwrist_max %>%
+  group_by(ID) %>%
+  mutate(x_LShoulder = ifelse(is.na(x_LShoulder),
+                              mean(x_LShoulder,na.rm=TRUE),
+                              x_LShoulder)) %>%
+  mutate(x_LWrist = ifelse(is.na(x_LWrist),
+                           mean(x_LWrist,na.rm=TRUE),
+                           x_LWrist))
+
+# here i calculate the minimal absolute vertical difference between 
+# the neck and the wrist
+# replace NaN values with the mean of the right wrist column same for neck
+x <- i %>%
+  pull(x_LShoulder)
+
+y <- i %>%
+  pull(x_LWrist)
+
+j <- mean(x, na.rm = TRUE)
+x[is.nan(x)] <- mean(j) 
+
+g <- mean(y, na.rm = TRUE)
+y[is.nan(y)] <- mean(g) 
+
+# subtract in absolute the new wrist r col (x) from the new neck col (y) and
+# calc its difference. Which is the minimal difference for each video between
+# a right wrist and neck and I stored it in the datafram i.
+XLshoulder_XLwrist_max <- i %>%
+  add_column(x) %>%
+  add_column(y) %>%
+  ungroup() %>%
+  mutate(difference = abs(x- y))%>%
+  group_by(ID) %>%
+  slice(which.max(difference))  %>%
+  ungroup() %>%
+  select(XLshoulder_XLwrist_max = difference)
+
+rm(x)
+rm(y)
+rm(j)
+rm(g)
+rm(i)
+
+i <- XLshoulder_XLwrist_max + Xshoulder_Xwrist_max
+shoulderX_wristX_max <- i
+####################### What do my features tell me ############################
+
+# ID: 
+# simply the 300 IDs that refer to the 300 video's that are used
+
+# head_min:   
+# the two heads with a minimal distance compared to all other heads 
+# available per video over x and y
+
+# wristR_min: 
+# The two wrists with a minimal distance compared to all other wrist 
+# combinations available per video.
+# If large number, none of the wrist pairs were close together
+
+# RshoudlerElbowDifference_sum: 
+# shows a sum of the measures of the y height of the elbow - y height of the 
+# shoulder. 
+# if it has a low value it means that the elbow was lower than the shoulder
+# if it has a high value it means that the elbow was higher than the shoulder
+
+# LshoudlerElbowDifference_sum: 
+# shows a sum of the measures of the y height of the elbow - y height of the 
+# shoulder. 
+# if it has a low value it means that the elbow was lower than the shoulder
+# if it has a high value it means that the elbow was higher than the shoulder
+
+# XYneckWristMinDistance
+# Shows who's wrist and neck are closest to each other in the sense of height
+# but also the closest to each other horizontally
+# i think this could indicate hugs
+
+#rShoulderElbowAngle
+
+#lShoulderElbowAngle
+
+############ import the files back into R after Py calculations ################
+rm(y)
+# Minimum head position difference based on x and y
+y <- read.csv("y.csv", header=FALSE)
+y_true <- as.data.frame(do.call(rbind, y))
+
+############### Bring all columns together in one dataframe ####################
+
+# Add an ID column, simply going from 1 to 300
+
+id <- seq(1, 300)
+
+ID <- as.data.frame(id)
+
+head_min <- head_min %>%
+  rename(head_minDif = V1)
+
+y_true <- y_true %>%
+  rename(y_true = V1)
+
+final_df <- 
+  bind_cols(ID, 
+            head_min, 
+            LshoudlerElbowDifference_sum, 
+            RshoudlerElbowDifference_sum,
+            lShoulderElbowAngle,
+            wristR_min,
+            XYneckWristMinDistance,
+            YRshoulderWristDiff,
+            y_true)
+ 
+############### treating missing data with random forest #######################
+install.packages('randomForest')
+install.packages("missForest")
+library(randomForest)
+library(missForest)
+library(foreach)
+library(itertools)
+library(iterators)
+
+print(colnames(final_df))
+
+impute_missing_df <- final_df %>%
+  select(head_minDif, shoulder_elbow_L, shoulder_elbow_R,lshoulderElbowAngle,
+         XwristL_neck_dif, wristR_minDif, YRshoulderWristDiff)
+
+impute_missing_df.mis <- prodNA(impute_missing_df, noNA = 0.1)
+summary(impute_missing_df.mis)
+
+set.seed(1)
+impute_missing_df.imp <- missForest(impute_missing_df.mis)
+impute_missing_df.imp$ximp
+impute_missing_df.imp$OOBerror #the error of the forest
+
+############### creating a dataframe with the new columns #######################
+imputed_missing_df <- impute_missing_df.imp$ximp %>%
+  add_column(ID = id, .before = 1) %>%
+  add_column(y = y_true$y_true)
+
+############### super quick decision tree to check performance #######################
+# install and load the packages
+install.packages("rpart")
+install.packages("caret", dependencies = TRUE)
+library(rpart)
+library(caret)
+
+#create a train and test set
+train_set <- imputed_missing_df
+test_set <- imputed_missing_df
+train_set_2 <- imputed_missing_df[2:8]
+
+# convert outcome variable from characters to numbers
+train_set <- imputed_missing_df %>%
+  mutate(y = case_when(
+    y == 'handShake'  ~ 0,
+    y == 'highFive'  ~ 1,
+    y == 'hug'  ~ 2,
+    y == 'kiss' ~ 3,
+    y == 'negative' ~ 4))
+
+test_set <- imputed_missing_df %>%
+  mutate(y = case_when(
+    y == 'handShake'  ~ 0,
+    y == 'highFive'  ~ 1,
+    y == 'hug'  ~ 2,
+    y == 'kiss' ~ 3,
+    y == 'negative' ~ 4))
+
+
+train_set <- train_set[c(1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 22, 23, 
+                         29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 52, 53, 54, 
+                         55, 64, 65, 66, 67, 68, 69, 70, 71, 72, 76, 86, 87, 
+                         88, 89, 90, 91, 92, 93, 96, 99, 100, 101, 105, 106, 
+                         107, 108, 109, 110, 113, 114, 119, 122, 123, 124,
+                         125, 126, 128, 137, 138, 139, 140, 141, 143, 145,
+                         147, 148, 152, 153, 154, 155, 156, 165, 169, 170, 
+                         171, 175, 177, 178, 180, 182, 183, 184, 187, 193,
+                         194, 195, 196, 197, 198, 199, 200, 251, 252, 253, 
+                         254, 255, 256 ,257, 258, 259, 260, 261, 262, 263, 264, 
+                         265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275,
+                         276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286,
+                         287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297,
+                         298, 299, 300),]
+
+train_set <- train_set_2[c(1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 22, 23, 
+                         29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 52, 53, 54, 
+                         55, 64, 65, 66, 67, 68, 69, 70, 71, 72, 76, 86, 87, 
+                         88, 89, 90, 91, 92, 93, 96, 99, 100, 101, 105, 106, 
+                         107, 108, 109, 110, 113, 114, 119, 122, 123, 124,
+                         125, 126, 128, 137, 138, 139, 140, 141, 143, 145,
+                         147, 148, 152, 153, 154, 155, 156, 165, 169, 170, 
+                         171, 175, 177, 178, 180, 182, 183, 184, 187, 193,
+                         194, 195, 196, 197, 198, 199, 200, 251, 252, 253, 
+                         254, 255, 256 ,257, 258, 259, 260, 261, 262, 263, 264, 
+                         265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275,
+                         276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286,
+                         287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297,
+                         298, 299, 300),]
+
+test_set <-test_set[ c(2, 14, 15, 16, 18, 19, 20, 21, 24, 25, 26, 27, 28, 32, 
+                       40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 56, 57,
+                       58, 59, 60, 61, 62, 63, 73, 74, 75, 77, 78, 79, 80, 81,
+                       82, 83, 84, 85, 94, 95, 97, 98, 102, 103, 104, 111, 112, 
+                       115, 116, 117, 118, 120, 121, 127, 129, 130, 131, 132, 
+                       133, 134, 135, 136, 142, 144, 146, 149, 150, 151, 157, 
+                       158, 159, 160, 161, 162, 163, 164, 166, 167, 168, 
+                       172, 173, 174, 176, 179, 181, 185, 186, 188, 189, 190, 
+                       191, 192, 201, 202, 203, 204, 205, 206, 207, 208, 209, 
+                       210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 
+                       221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 
+                       232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 
+                       243,244, 245, 246, 247, 248, 249, 250),]
+
+
+train_set$y <- as.character(train_set$y)
+train_set$y <- as.factor(train_set$y)
+
+test_set$y <- as.character(test_set$y)
+test_set$y <- as.factor(test_set$y)
+
+######################### run the decision tree model ##########################
+
+######################### extended model
+model <- rpart(formula = y ~ head_minDif + 
+                 shoulder_elbow_L + 
+                 shoulder_elbow_R + 
+                 lshoulderElbowAngle + 
+                 wristR_minDif + 
+                 XwristL_neck_dif+
+               YRshoulderWristDiff,
+               data = train_set, 
+               method = "class")
+
+#predict on the test cases
+test_set$pred <- predict(object = model,  
+                         newdata = test_set,   
+                         type = "class")
+# saved metrics
+extended_DT <- confusionMatrix(table(test_set$pred, test_set$y))
+
+########################## base model
+model2 <- rpart(formula = y ~ wristR_minDif +
+                  YRshoulderWristDiff +
+                  shoulder_elbow_L + 
+                  shoulder_elbow_R +
+                  head_minDif,
+               data = train_set, 
+               method = "class")
+
+#predict on the test cases
+test_set$pred2 <- predict(object = model2,  
+                         newdata = test_set,   
+                         type = "class")
+
+# saved metrics
+base_DT <- confusionMatrix(table(test_set$pred2, test_set$y))
+
+########################  run random forest model  ############################
+library(randomForest)
+
+#tuning the model parameters
+m2 <- tuneRF(
+  x          = train_set_2,
+  y          = train_set$y,
+  ntreeTry   = 500,
+  mtryStart  = 6,
+  stepFactor = 1.5,
+  improve    = 0.01,
+  trace      = FALSE
+)
+
+###################### extended model
+rf_classifier = randomForest(y ~ head_minDif + 
+                               shoulder_elbow_L + 
+                               shoulder_elbow_R + 
+                               lshoulderElbowAngle + 
+                               wristR_minDif + 
+                               XwristL_neck_dif+
+                               YRshoulderWristDiff,
+                             data=train_set, 
+                             ntree=500, 
+                             mtry=2, 
+                             importance=TRUE)
+
+rf_classifier
+varImpPlot(rf_classifier)
+
+# return all necessary metrics
+prediction_rf <- predict(rf_classifier, test_set)
+
+# saved metrics
+extended_RF <- ml_test(prediction_rf, true_lab, output.as.table = FALSE)
+
+################################## base model 
+rf_classifier2 = randomForest(y ~ wristR_minDif +
+                               YRshoulderWristDiff +
+                               shoulder_elbow_L + 
+                               shoulder_elbow_R +
+                               head_minDif,
+                             data=train_set, 
+                             ntree=500, 
+                             mtry=2, 
+                             importance=TRUE)
+
+rf_classifier2
+varImpPlot(rf_classifier2)
+
+# return all necessary metrics
+prediction_rf2 <- predict(rf_classifier2, test_set)
+
+# saved metrics
+base_RF <- ml_test(prediction_rf2, true_lab, output.as.table = FALSE)
+
+####################### svm model ##############################################
+install.packages('e1071') 
+library(e1071) 
+
+#tuning
+svm_model1 <- tune(svm , y ~ head_minDif + 
+                     shoulder_elbow_L + 
+                     shoulder_elbow_R + 
+                     lshoulderElbowAngle + 
+                     wristR_minDif + 
+                     XwristL_neck_dif+
+                     YRshoulderWristDiff,
+                   data = train_set, 
+                   kernel = "radial" , 
+                   type = "C-classification", 
+                   ranges = list(gamma = c(0.1, 0.001), 
+                                 cost = c(10:100)))
+
+summary(svm_model1)
+
+########################## extended model 
+svm1 = svm(formula = y ~ head_minDif + 
+             shoulder_elbow_L +
+             wristR_minDif +
+             shoulder_elbow_R +
+             lshoulderElbowAngle+
+             XwristL_neck_dif +
+             YRshoulderWristDiff,
+                 data = train_set,
+                 type = 'C-classification', 
+                 kernel = 'radial',
+           gamma = 0.1,
+           cost = 10) 
+summary(svm1)
+
+# behaviour on the test set
+prediction <- predict(svm1, test_set)
+xtab <- table(test_set$y, prediction)
+xtab
+
+# compute all metrics on the test set predictions
+install.packages('mltest')
+library(mltest)
+
+# saved metrics
+extended_svm <- ml_test(prediction, true_lab, output.as.table = FALSE)
+
+############################### base model  
+
+svm2 = svm(formula = y ~ wristR_minDif +
+             YRshoulderWristDiff +
+             shoulder_elbow_L + 
+           shoulder_elbow_R +
+             head_minDif,
+           data = train_set,
+           type = 'C-classification', 
+           kernel = 'radial',
+           gamma = 0.1,
+           cost = 10) 
+summary(svm2)
+
+# behaviour on the test set
+prediction2 <- predict(svm2, test_set)
+xtab2 <- table(test_set$y, prediction2)
+xtab2
+
+# compute all metrics on the test set predictions
+install.packages('mltest')
+library(mltest)
+
+# saved metrics
+base_svm <- ml_test(prediction2, true_lab, output.as.table = FALSE)
+
+
+
+
+
+
+
+
+
+
+train_set2 <- final_df
+test_set2 <- final_df
+train_set2b <- final_df[2:8]
+
+# convert outcome variable from characters to numbers
+train_set2 <- train_set2 %>%
+  mutate(y_true = case_when(
+    y_true == 'handShake'  ~ 0,
+    y_true == 'highFive'  ~ 1,
+    y_true =='hug'  ~ 2,
+    y_true == 'kiss' ~ 3,
+    y_true == 'negative' ~ 4))
+
+test_set2 <- test_set2 %>%
+  mutate(y_true = case_when(
+    y_true == 'handShake'  ~ 0,
+    y_true == 'highFive'  ~ 1,
+    y_true == 'hug'  ~ 2,
+    y_true == 'kiss' ~ 3,
+    y_true == 'negative' ~ 4))
+
+
+train_set2 <- train_set2[c(1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 22, 23, 
+                         29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 52, 53, 54, 
+                         55, 64, 65, 66, 67, 68, 69, 70, 71, 72, 76, 86, 87, 
+                         88, 89, 90, 91, 92, 93, 96, 99, 100, 101, 105, 106, 
+                         107, 108, 109, 110, 113, 114, 119, 122, 123, 124,
+                         125, 126, 128, 137, 138, 139, 140, 141, 143, 145,
+                         147, 148, 152, 153, 154, 155, 156, 165, 169, 170, 
+                         171, 175, 177, 178, 180, 182, 183, 184, 187, 193,
+                         194, 195, 196, 197, 198, 199, 200, 251, 252, 253, 
+                         254, 255, 256 ,257, 258, 259, 260, 261, 262, 263, 264, 
+                         265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275,
+                         276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286,
+                         287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297,
+                         298, 299, 300),]
+
+train_set2b <- train_set2b[c(1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 22, 23, 
+                             29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 52, 53, 54, 
+                             55, 64, 65, 66, 67, 68, 69, 70, 71, 72, 76, 86, 87, 
+                             88, 89, 90, 91, 92, 93, 96, 99, 100, 101, 105, 106, 
+                             107, 108, 109, 110, 113, 114, 119, 122, 123, 124,
+                             125, 126, 128, 137, 138, 139, 140, 141, 143, 145,
+                             147, 148, 152, 153, 154, 155, 156, 165, 169, 170, 
+                             171, 175, 177, 178, 180, 182, 183, 184, 187, 193,
+                             194, 195, 196, 197, 198, 199, 200, 251, 252, 253, 
+                             254, 255, 256 ,257, 258, 259, 260, 261, 262, 263, 264, 
+                             265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275,
+                             276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286,
+                             287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297,
+                             298, 299, 300),]
+
+test_set2 <-test_set2[ c(2, 14, 15, 16, 18, 19, 20, 21, 24, 25, 26, 27, 28, 32, 
+                       40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 56, 57,
+                       58, 59, 60, 61, 62, 63, 73, 74, 75, 77, 78, 79, 80, 81,
+                       82, 83, 84, 85, 94, 95, 97, 98, 102, 103, 104, 111, 112, 
+                       115, 116, 117, 118, 120, 121, 127, 129, 130, 131, 132, 
+                       133, 134, 135, 136, 142, 144, 146, 149, 150, 151, 157, 
+                       158, 159, 160, 161, 162, 163, 164, 166, 167, 168, 
+                       172, 173, 174, 176, 179, 181, 185, 186, 188, 189, 190, 
+                       191, 192, 201, 202, 203, 204, 205, 206, 207, 208, 209, 
+                       210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 
+                       221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 
+                       232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 
+                       243,244, 245, 246, 247, 248, 249, 250),]
+
+
+install.packages("imputeTS")
+library(imputeTS)
+
+train_set2 <- na_mean(train_set2, "mean")
+test_set2<-na_mean(test_set2, "mean")
+train_set2b <- na_mean(train_set2b, "mean")
+
+train_set2$y_true <- as.character(train_set2$y_true)
+train_set2$y_true <- as.factor(train_set2$y_true)
+
+test_set2$y_true <- as.character(test_set2$y_true)
+test_set2$y_true <- as.factor(test_set2$y_true)
+
+######################### run the decision tree model ##########################
+
+
+
+######################### extended model
+model8 <- rpart(formula = y_true ~ head_minDif + 
+                 shoulder_elbow_L + 
+                 shoulder_elbow_R + 
+                 lshoulderElbowAngle + 
+                 wristR_minDif + 
+                 XwristL_neck_dif+
+                 YRshoulderWristDiff,
+               data = train_set2, 
+               method = "class")
+
+#predict on the test cases
+test_set2$pred <- predict(object = model8,  
+                         newdata = test_set2,   
+                         type = "class")
+# saved metrics
+confusionMatrix(table(test_set2$pred, test_set2$y_true))
+
+########################## base model
+model82 <- rpart(formula = y_true ~ wristR_minDif +
+                  YRshoulderWristDiff +
+                  shoulder_elbow_L + 
+                  shoulder_elbow_R +
+                  head_minDif,
+                data = train_set2, 
+                method = "class")
+
+#predict on the test cases
+test_set2$pred <- predict(object = model82,  
+                          newdata = test_set2,   
+                          type = "class")
+
+# saved metrics
+confusionMatrix(table(test_set2$pred, test_set2$y_true))
+
+########################  run random forest model  ############################
+library(randomForest)
+
+#tuning the model parameters
+m3 <- tuneRF(
+  x          = train_set2b,
+  y          = train_set2$y_true,
+  ntreeTry   = 500,
+  mtryStart  = 7,
+  stepFactor = 1.5,
+  improve    = 0.01,
+  trace      = FALSE
+)
+
+###################### extended model
+rf_classifier8 = randomForest(y_true ~ head_minDif + 
+                               shoulder_elbow_L + 
+                               shoulder_elbow_R + 
+                               lshoulderElbowAngle + 
+                               wristR_minDif + 
+                               XwristL_neck_dif+
+                               YRshoulderWristDiff,
+                             data=train_set2, 
+                             ntree=500, 
+                             mtry=5, 
+                             importance=TRUE)
+
+rf_classifier8
+varImpPlot(rf_classifier8)
+
+# return all necessary metrics
+prediction_rf8 <- predict(rf_classifier8, test_set2)
+
+# saved metrics
+ml_test(prediction_rf8, true_lab, output.as.table = FALSE)
+
+
+
+########################## extended model 
+svm8 = svm(formula = y_true ~ head_minDif + 
+             shoulder_elbow_L +
+             wristR_minDif +
+             shoulder_elbow_R +
+             lshoulderElbowAngle+
+             XwristL_neck_dif +
+             YRshoulderWristDiff,
+           data = train_set2,
+           type = 'C-classification', 
+           kernel = 'radial',
+           gamma = 0.1,
+           cost = 10) 
+summary(svm8)
+
+# behaviour on the test set
+prediction8 <- predict(svm8, test_set2)
+xtab8 <- table(test_set2$y_true, prediction8)
+xtab8
+
+
+# compute all metrics on the test set predictions
+install.packages('mltest')
+library(mltest)
+
+# saved metrics
+ml_test(prediction8, true_lab, output.as.table = FALSE)
+
+############################### base model  
+
+svm8 = svm(formula = y_true ~ wristR_minDif +
+             YRshoulderWristDiff +
+             shoulder_elbow_L + 
+             shoulder_elbow_R +
+             head_minDif,
+           data = train_set2,
+           type = 'C-classification', 
+           kernel = 'radial',
+           gamma = 0.1,
+           cost = 10) 
+summary(svm8)
+
+# behaviour on the test set
+prediction8 <- predict(svm8, test_set2)
+xtab8 <- table(test_set2$y_true, prediction8)
+xtab8
+
+# compute all metrics on the test set predictions
+install.packages('mltest')
+library(mltest)
+
+# saved metrics
+ml_test(prediction8, true_lab, output.as.table = FALSE)
+
+library(imputeTS)
+library(tidyverse)
+library(dplyr)
+library(rpart)
+install.packages("pROC")
+library(pROC)
+library(caret)
+library(lattice)
+library(ggplot2)
+install.packages("mice")
+library(mi)
+library(missForest)
+library(itertools)
+library(foreach)
+library(mice)
+library(purrr)
+
+# the cleaned dataset
+cleaned_set <- cleaned_body_parts
+
+# use mean imputation  
+cleaned_set <- na_mean(cleaned_set, "mean")
+
+install.packages('randomForest')
+install.packages("missForest")
+library(randomForest)
+library(missForest)
+library(foreach)
+library(itertools)
+library(iterators)
+
+print(colnames(cleaned_set))
+
+i <- cleaned_set$ID
+
+impute_missing_df <- cleaned_set %>%
+  select(-c(ID))
+
+impute_missing_df.mis <- prodNA(impute_missing_df, noNA = 0.1)
+summary(impute_missing_df.mis)
+
+set.seed(1)
+impute_missing_df.imp <- missForest(impute_missing_df.mis)
+impute_missing_df.imp$ximp
+impute_missing_df.imp$OOBerror #the error of the forest
+
+imputed_missing_df <- impute_missing_df.imp$ximp %>%
+  add_column(ID = i, .before = 1) 
+
+####################################################### df body distance minimal
+# create distance for the nose dataset
+body_distance <- imputed_missing_df %>%
+  select(ID, x_Nose, y_Nose, 
+         x_Neck, y_neck,
+         x_RShoulder, y_RShoulder, 
+         x_RElbow, y_RElbow, 
+         x_RWrist, y_RWrist, 
+         x_LShoulder, y_LShoulder, 
+         x_LElbow, y_LElbow, 
+         x_LWrist, y_LWrist, 
+         x_MidHip, y_MidHip, 
+         x_RHip, y_RHip, 
+         x_LHip, y_LHip, 
+         x_REye, y_REye, 
+         x_LEye, y_LEye, 
+         x_REar, y_REar, 
+         x_LEar, y_LEar)
+
+removed_distance <- complete.cases(body_distance)
+i <- bind_cols(ID = ID_vec, dist_head = removed_distance)
+
+i <- i %>%
+  group_by(ID) %>%
+  mutate(amount_true = sum(dist_head == TRUE)) %>%
+  mutate(amount_false = sum(dist_head == FALSE)) %>%
+  select(ID, amount_true, amount_false) %>%
+  distinct() %>%
+  filter(amount_true < 1)
+
+# all nose values substracted by same ID 
+body_distance <- body_distance%>%
+  group_by(ID) %>%
+  mutate(row = row_number()) %>%
+  split(.$ID) %>%
+  map(
+    ~nest(., data = -c(ID, row)) %>%
+      list(.,.) %>%
+      reduce(full_join, by = "ID") %>%
+      rename(row1 = row.x, row2 = row.y, vec1 = data.x, vec2 = data.y) %>%
+      filter(row1 != row2) %>%
+      mutate(diff = map2(vec1, vec2, ~unlist(.x)-unlist(.y)))%>%
+      select(-vec1, -vec2) %>%
+      unnest_wider(col = diff)
+  ) %>%
+  bind_rows()
+
+
+body_distance <- body_distance %>%
+  mutate(x_Nose = x_Nose ^ 2, 
+         y_Nose = y_Nose ^ 2,
+         x_Neck = x_Neck ^ 2,
+         y_neck = y_neck ^ 2,
+         x_RShoulder = x_RShoulder ^ 2,
+         y_RShoulder = y_RShoulder ^ 2, 
+         x_RElbow = x_RElbow ^ 2, 
+         y_RElbow = y_RElbow ^ 2, 
+         x_RWrist = x_RWrist ^ 2, 
+         y_RWrist = y_RWrist ^ 2, 
+         x_LShoulder = x_LShoulder ^ 2, 
+         y_LShoulder = y_LShoulder ^ 2, 
+         x_LElbow = x_LElbow ^ 2, 
+         y_LElbow = y_LElbow ^ 2, 
+         x_LWrist = x_LWrist ^ 2, 
+         y_LWrist = y_LWrist ^ 2, 
+         x_MidHip = x_MidHip ^ 2, 
+         y_MidHip = y_MidHip ^ 2, 
+         x_RHip = x_RHip ^ 2, 
+         y_RHip = y_RHip ^ 2, 
+         x_LHip = x_LHip ^ 2, 
+         y_LHip = y_LHip ^ 2, 
+         x_REye = x_REye ^ 2,
+         y_REye = y_REye ^ 2,
+         x_LEye = x_LEye ^2,
+         y_LEye = y_LEye ^ 2, 
+         x_REar = x_REar ^ 2,
+         y_REar = y_REar ^ 2,
+         x_LEar = x_LEar ^ 2,
+         y_LEar = y_LEar ^ 2) %>%
+  mutate(nose_dif = x_Nose + y_Nose,
+         neck_dif = x_Neck + y_neck,
+         Rshoulder_dif = x_RShoulder + y_RShoulder,
+         Relbow_dif = x_RElbow + y_RElbow,
+         Rwrist_dif = x_RWrist + y_RWrist,
+         Lshoulder_dif = x_LShoulder + y_LShoulder,
+         Lelbow_dif = x_LElbow + y_LElbow, 
+         Lwrist_dif = x_LWrist + y_LWrist,
+         MidHip_dif = x_MidHip + y_MidHip,
+         Rhip_dif = x_RHip + y_RHip, 
+         LHip_dif = x_LHip + y_LHip,
+         REye_dif = x_REye + y_REye,
+         LEye_diff = x_LEye + y_LEye, 
+         REar_diff= x_REar + y_REar,
+         LEar_diff = x_LEar + y_LEar) %>%
+  mutate(nose_dif = sqrt(nose_dif),
+         neck_dif = sqrt(neck_dif),
+         Rshoulder_dif = sqrt(Rshoulder_dif),
+         Relbow_dif = sqrt(Relbow_dif),
+         Rwrist_dif = sqrt(Rwrist_dif),
+         Lshoulder_dif = sqrt(Lshoulder_dif),
+         Lelbow_dif = sqrt(Lelbow_dif),
+         Lwrist_dif = sqrt(Lwrist_dif),
+         MidHip_dif = sqrt(MidHip_dif),
+         Rhip_dif = sqrt(Rhip_dif),
+         LHip_dif = sqrt(LHip_dif),
+         REye_dif = sqrt(REye_dif),
+         LEye_diff = sqrt(LEye_diff), 
+         REar_diff= sqrt(REar_diff),
+         LEar_diff = sqrt(LEar_diff)) %>%
+  select(ID, 
+         nose_dif, 
+         neck_dif, 
+         Rshoulder_dif,
+         Relbow_dif,
+         Rwrist_dif,
+         Lshoulder_dif,
+         Lelbow_dif,
+         Lwrist_dif,
+         MidHip_dif,
+         Rhip_dif,
+         LHip_dif,
+         REye_dif, 
+         LEye_diff, 
+         REar_diff,
+         LEar_diff)
+
+body_distance[body_distance == 0] <- NA
+
+#impute NaN with mean
+#body_distance <- na_mean(body_distance, "mean")
+
+body_distance$mean= rowMeans(body_distance[,2:16], na.rm=TRUE)
+
+body_distance <- body_distance %>%
+  group_by(ID) %>%
+  slice(which.min(mean))
+
+no_dist <- cleaned_body_parts %>%
+  select(ID) %>%
+  group_by(ID) %>%
+  distinct()
+
+no_dist <- no_dist[c(73, 74, 85, 102, 109, 114, 116, 117, 121, 122,  124, 133, 
+                     134, 142, 146, 152, 165, 176, 203, 204, 209, 210, 217, 
+                     222, 224, 227, 230, 231, 232, 233, 234, 235, 245, 246, 
+                     249, 262, 265, 289, 292, 295),]
+
+no_dist['no_dist'] <- NA
+x<- rbind(body_distance, no_dist)
+
+x <- x %>%
+  arrange(ID)
+
+body_distance <- x %>%
+  ungroup()
+
+body_distance[] <- lapply(body_distance, function(x) { 
+  x[is.na(x)] <- mean(x, na.rm = TRUE)
+  x
+})
+
+########################################################### difference dataframe
+body_distance <- body_distance %>%
+  select(ID,
+         nose_dif,
+         neck_dif,
+         Rshoulder_dif,
+         Relbow_dif, 
+         Rwrist_dif, 
+         Lshoulder_dif,
+         Lelbow_dif,
+         Lwrist_dif,
+         MidHip_dif,
+         Rhip_dif,
+         LHip_dif,
+         REye_dif, 
+         LEye_diff, 
+         REar_diff,
+         LEar_diff,
+         mean)
+
+####################################################  right shoulder elbow angle
+# for the right elbow and right shoulder
+angles <- cleaned_body_parts %>%
+  select(ID, x_RShoulder, y_RShoulder, x_RElbow, y_RElbow, x_RWrist, y_RWrist)
+
+removed_angles <- complete.cases(angles)
+i <- bind_cols(ID = ID_vec, angles = removed_angles)
+
+i <- i %>%
+  group_by(ID) %>%
+  mutate(amount_true = sum(angles == TRUE)) %>%
+  mutate(amount_false = sum(angles == FALSE)) %>%
+  select(ID, amount_true, amount_false) %>%
+  distinct() %>%
+  filter(amount_true < 1)
+
+#computing the angle of a which should be the elbow
+# a = elbow
+# b = shoulder
+# c = wrist
+angles <- angles %>%
+  na.omit(angles) %>%
+  mutate(a = sqrt(((x_RShoulder - x_RWrist)^2) + ((y_RShoulder - y_RWrist)^2))) %>%
+  mutate(b = sqrt(((x_RElbow - x_RWrist)^2) + ((y_RElbow - y_RWrist)^2))) %>%
+  mutate(c = sqrt(((x_RElbow - x_RShoulder)^2) + ((y_RElbow - y_RShoulder)^2))) %>%
+  mutate(a2 = a^2) %>%
+  mutate(b2 = b^2) %>%
+  mutate(c2 = c^2) %>%
+  mutate(cosA = ((b2+c2-a2) / (2*b*c))) %>%
+  mutate(rad = acos(cosA)) %>%
+  mutate(angle_degrees = rad * (180/pi)) %>%
+  select(ID, angle_degrees)%>%
+  group_by(ID) %>%
+  slice(which.min(angle_degrees))
+
+no_angles <- cleaned_body_parts %>%
+  select(ID) %>%
+  group_by(ID) %>%
+  distinct()
+
+no_angles <- no_angles[c(42, 100, 105, 111, 117, 122, 130, 133, 134, 136, 137, 
+                         142, 146, 151, 152, 153, 155, 161, 165, 167, 169, 
+                         176, 177, 180, 181, 182, 184, 187, 189, 199, 209, 
+                         222, 225, 233, 244, 246, 248, 250, 261, 262, 263, 
+                         266, 267, 272, 285),]
+
+no_angles['angle_degrees'] <- NA
+x<- rbind(angles, no_angles)
+x <- x %>%
+  arrange(ID) %>%
+  ungroup() %>%
+  select(RshoulderElbowAngle = angle_degrees)
+
+rShoulderElbowAngle <- x
+
+########################################### for the left elbow and left shoulder
+angles <- cleaned_body_parts %>%
+  select(ID, x_LShoulder, y_LShoulder, x_LElbow, y_LElbow, x_LWrist, y_LWrist)
+
+removed_angles <- complete.cases(angles)
+i <- bind_cols(ID = ID_vec, angles = removed_angles)
+
+i <- i %>%
+  group_by(ID) %>%
+  mutate(amount_true = sum(angles == TRUE)) %>%
+  mutate(amount_false = sum(angles == FALSE)) %>%
+  select(ID, amount_true, amount_false) %>%
+  distinct() %>%
+  filter(amount_true < 1)
+
+#computing the angle of a which should be the elbow
+# a = elbow
+# b = shoulder
+# c = wrist
+angles <- angles %>%
+  na.omit(angles) %>%
+  mutate(a = sqrt(((x_LShoulder - x_LWrist)^2) + ((y_LShoulder - y_LWrist)^2))) %>%
+  mutate(b = sqrt(((x_LElbow - x_LWrist)^2) + ((y_LElbow - y_LWrist)^2))) %>%
+  mutate(c = sqrt(((x_LElbow - x_LShoulder)^2) + ((y_LElbow - y_LShoulder)^2))) %>%
+  mutate(a2 = a^2) %>%
+  mutate(b2 = b^2) %>%
+  mutate(c2 = c^2) %>%
+  mutate(cosA = ((b2+c2-a2) / (2*b*c))) %>%
+  mutate(rad = acos(cosA)) %>%
+  mutate(angle_degrees = rad * (180/pi)) %>%
+  select(ID, angle_degrees)%>%
+  group_by(ID) %>%
+  slice(which.min(angle_degrees))
+
+no_angles <- cleaned_body_parts %>%
+  select(ID) %>%
+  group_by(ID) %>%
+  distinct()
+
+no_angles <- no_angles[c(12, 17, 34, 43, 51, 52, 68, 73, 74, 85, 92, 94, 103, 
+                         104, 114, 115, 127, 132, 133, 142, 143, 151, 152, 153, 
+                         154, 155, 161, 165, 170, 171, 176, 177, 180, 181, 182, 
+                         183, 184, 185, 187, 192, 199, 200, 209, 220, 231, 233
+                         , 235, 236, 239, 241, 244, 248, 249, 250, 255, 259, 
+                         263, 265, 266, 277, 279),]
+
+no_angles['angle_degrees'] <- NA
+x<- rbind(angles, no_angles)
+x <- x %>%
+  arrange(ID) %>%
+  ungroup() %>%
+  select(lshoulderElbowAngle = angle_degrees)
+
+lShoulderElbowAngle <- x
+
+rm(angles)
+rm(no_angles)
+rm(i)
+rm(x)
+
+############################################################### Add to dataframe
+body_distance <- body_distance %>%
+  add_column(RshoulderElbowAngle = rShoulderElbowAngle$RshoulderElbowAngle) %>%
+  add_column(lshoulderElbowAngle = lShoulderElbowAngle$lshoulderElbowAngle) %>%
+  select(nose_dif, 
+         neck_dif, 
+         Rshoulder_dif, 
+         Relbow_dif, 
+         Rwrist_dif, 
+         Lshoulder_dif, 
+         Lelbow_dif, 
+         Lwrist_dif, 
+         MidHip_dif, 
+         Rhip_dif, 
+         LHip_dif, 
+         REye_dif, 
+         LEye_diff, 
+         REar_diff, 
+         LEar_diff, 
+         mean, 
+         RshoulderElbowAngle, 
+         lshoulderElbowAngle) %>%
+  add_column(YRshoulderWristDiff) %>%
+  add_column(YLshoulderWristDiff) %>%
+  add_column(y_true)
+
+body_distance[] <- lapply(body_distance, function(x) { 
+  x[is.na(x)] <- mean(x, na.rm = TRUE)
+  x
+})
+
+############################################################## 
+# install and load the packages
+install.packages("rpart")
+install.packages("caret", dependencies = TRUE)
+library(rpart)
+library(caret)
+
+#create a train and test set
+train_set <- body_distance
+test_set <- body_distance
+
+# convert outcome variable from characters to numbers
+train_set <- train_set %>%
+  mutate(y_true = case_when(
+    y_true == 'handShake'  ~ 0,
+    y_true == 'highFive'  ~ 1,
+    y_true == 'hug'  ~ 2,
+    y_true == 'kiss' ~ 3,
+    y_true == 'negative' ~ 4))
+
+test_set <- test_set %>%
+  mutate(y_true = case_when(
+    y_true == 'handShake'  ~ 0,
+    y_true == 'highFive'  ~ 1,
+    y_true == 'hug'  ~ 2,
+    y_true == 'kiss' ~ 3,
+    y_true == 'negative' ~ 4))
+
+
+train_set <- train_set[c(1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 22, 23, 
+                         29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 52, 53, 54, 
+                         55, 64, 65, 66, 67, 68, 69, 70, 71, 72, 76, 86, 87, 
+                         88, 89, 90, 91, 92, 93, 96, 99, 100, 101, 105, 106, 
+                         107, 108, 109, 110, 113, 114, 119, 122, 123, 124,
+                         125, 126, 128, 137, 138, 139, 140, 141, 143, 145,
+                         147, 148, 152, 153, 154, 155, 156, 165, 169, 170, 
+                         171, 175, 177, 178, 180, 182, 183, 184, 187, 193,
+                         194, 195, 196, 197, 198, 199, 200, 251, 252, 253, 
+                         254, 255, 256 ,257, 258, 259, 260, 261, 262, 263, 264, 
+                         265, 266, 267, 268, 269, 270, 271, 272, 273, 274, 275,
+                         276, 277, 278, 279, 280, 281, 282, 283, 284, 285, 286,
+                         287, 288, 289, 290, 291, 292, 293, 294, 295, 296, 297,
+                         298, 299, 300),]
+
+test_set <-test_set[ c(2, 14, 15, 16, 18, 19, 20, 21, 24, 25, 26, 27, 28, 32, 
+                       40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 56, 57,
+                       58, 59, 60, 61, 62, 63, 73, 74, 75, 77, 78, 79, 80, 81,
+                       82, 83, 84, 85, 94, 95, 97, 98, 102, 103, 104, 111, 112, 
+                       115, 116, 117, 118, 120, 121, 127, 129, 130, 131, 132, 
+                       133, 134, 135, 136, 142, 144, 146, 149, 150, 151, 157, 
+                       158, 159, 160, 161, 162, 163, 164, 166, 167, 168, 
+                       172, 173, 174, 176, 179, 181, 185, 186, 188, 189, 190, 
+                       191, 192, 201, 202, 203, 204, 205, 206, 207, 208, 209, 
+                       210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 
+                       221, 222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 
+                       232, 233, 234, 235, 236, 237, 238, 239, 240, 241, 242, 
+                       243,244, 245, 246, 247, 248, 249, 250),]
+
+
+
+train_set$y_true <- as.character(train_set$y_true)
+train_set$y_true <- as.factor(train_set$y_true)
+
+test_set$y_true <- as.character(test_set$y_true)
+test_set$y_true <- as.factor(test_set$y_true)
+
+################################################### feature selection
+install.packages('Boruta')
+library(Boruta)
+boruta_output <- Boruta(y_true ~ 
+                          nose_dif + 
+                          neck_dif + 
+                          Rshoulder_dif +
+                          Relbow_dif +
+                          Rwrist_dif +  
+                          Lshoulder_dif + 
+                          Lelbow_dif +
+                          Lwrist_dif + 
+                          MidHip_dif + 
+                          Rhip_dif + 
+                          LHip_dif + 
+                          REye_dif + 
+                          LEye_diff + 
+                          REar_diff + 
+                          LEar_diff + 
+                          mean +
+                          RshoulderElbowAngle+
+                          lshoulderElbowAngle+
+                          YRshoulderWristDiff +
+                          YLshoulderWristDiff, 
+                        data=na.omit(train_set), doTrace=0)  
+boruta_signif <- getSelectedAttributes(boruta_output, withTentative = TRUE)
+print(boruta_signif)
+
+
+roughFixMod <- TentativeRoughFix(boruta_output)
+boruta_signif <- getSelectedAttributes(roughFixMod)
+print(boruta_signif)
+
+plot(boruta_output, cex.axis=.7, las=2, xlab="", main="Variable Importance")  
+
+# features that will not be used in the decision tree 
+# Relbow_dif, Lwrist_dif, LHip_dif, LEar_diff, lshoulderElbowAngle, RshoulderElbowAngle
+
+######################### run the decision tree model ##########################
+gs <- list(minsplit = c(1:50),
+           maxdepth = c(1:30)) %>% 
+  cross_df() # Convert to data frame grid
+gs
+
+#2, 4, 5, 8, 10
+#1, 3,4, 5,6
+
+model <- function(...){
+  rpart(formula = y_true ~ nose_dif +
+          neck_dif +
+          Rshoulder_dif +
+          Relbow_dif +
+          Rwrist_dif +
+          Lshoulder_dif +
+          Lelbow_dif +
+          Lwrist_dif +
+          MidHip_dif +
+          Rhip_dif +
+          LHip_dif +
+          REye_dif +
+          LEye_diff +
+          REar_diff +
+          LEar_diff +
+          mean +
+          YRshoulderWristDiff +
+          YLshoulderWristDiff +
+          RshoulderElbowAngle,
+        data = train_set,
+        control = rpart.control(...))
+}
+
+gs <- gs %>% mutate(fit = pmap(gs, model))
+gs
+
+compute_accuracy <- function(fit, test_features, test_labels) {
+  predicted <- predict(fit, test_features, type = "class")
+  mean(predicted == test_labels)
+}
+
+test_features <- test_set %>% select(-y_true)
+test_labels   <- test_set$y_true
+gs <- gs %>%
+  mutate(test_accuracy = map_dbl(fit, compute_accuracy,
+                                 test_features, test_labels))
+gs
+
+gs <- gs %>% arrange(desc(test_accuracy), desc(minsplit), maxdepth)
+gs
+
+
+############################### base model
+model <- rpart(formula = y_true ~ nose_dif +
+                 neck_dif +
+                 Rshoulder_dif +
+                 Relbow_dif +
+                 Rwrist_dif +
+                 Lshoulder_dif +
+                 Lelbow_dif +
+                 Lwrist_dif +
+                 MidHip_dif +
+                 Rhip_dif +
+                 LHip_dif +
+                 REye_dif +
+                 LEye_diff +
+                 REar_diff +
+                 LEar_diff +
+                 mean +
+                 YRshoulderWristDiff +
+                 YLshoulderWristDiff,
+               data = train_set, 
+               method = "class",
+               minsplit = 13,
+               maxdepth = 5,
+               parms = list(split = 'information'))
+
+#predict on the test cases
+test_set$pred <- predict(object = model,  
+                         newdata = test_set,   
+                         type = "class")
+# saved metrics
+base_DT <- confusionMatrix(table(test_set$y_true, test_set$pred))
+
+##################################### extended model
+model <- rpart(formula = y_true ~ nose_dif +
+                 neck_dif +
+                 Rshoulder_dif +
+                 Relbow_dif +
+                 Rwrist_dif +
+                 Lshoulder_dif +
+                 Lelbow_dif +
+                 Lwrist_dif +
+                 MidHip_dif +
+                 Rhip_dif +
+                 LHip_dif +
+                 REye_dif +
+                 LEye_diff +
+                 REar_diff +
+                 LEar_diff +
+                 mean +
+                 YRshoulderWristDiff +
+                 YLshoulderWristDiff +
+                 RshoulderElbowAngle+
+                 lshoulderElbowAngle,
+               data = train_set, 
+               method = "class",
+               minsplit = 12,
+               maxdepth = 3,
+               parms = list(split = 'information'))
+
+
+#predict on the test cases
+test_set$pred <- predict(object = model,  
+                         newdata = test_set,   
+                         type = "class")
+# saved metrics
+extended_DT <- confusionMatrix(table(test_set$y_true, test_set$pred))
+
+model$variable.importance
+plotcp(model)
+text(model)
+
+################################################################ SVM
+
+########################### SVM tuning
+install.packages('e1071') 
+library(e1071) 
+
+#tuning
+svm_model1 <- tune(svm , y_true ~ nose_dif +
+                     neck_dif +
+                     Rshoulder_dif +
+                     Relbow_dif +
+                     Rwrist_dif +
+                     Lshoulder_dif +
+                     Lelbow_dif +
+                     Lwrist_dif +
+                     MidHip_dif +
+                     Rhip_dif +
+                     LHip_dif +
+                     REye_dif +
+                     LEye_diff +
+                     REar_diff +
+                     LEar_diff +
+                     mean +
+                     YRshoulderWristDiff +
+                     YLshoulderWristDiff +
+                     RshoulderElbowAngle,
+                   data = train_set, 
+                   kernel = "radial" , 
+                   type = "C-classification", 
+                   ranges = list(gamma = c(0.1, 0.001), 
+                                 cost = c(10:100)))
+
+summary(svm_model1)
+
+########################## base model  - SVM
+svm1 = svm(formula = y_true ~ nose_dif +
+             neck_dif +
+             Rshoulder_dif +
+             Relbow_dif +
+             Rwrist_dif +
+             Lshoulder_dif +
+             Lelbow_dif +
+             Lwrist_dif +
+             MidHip_dif +
+             Rhip_dif +
+             LHip_dif +
+             REye_dif +
+             LEye_diff +
+             REar_diff +
+             LEar_diff + 
+             mean +
+             YRshoulderWristDiff +
+             YLshoulderWristDiff,
+           data = train_set,
+           type = 'C-classification', 
+           kernel = 'radial',
+           gamma = 0.1,
+           cost = 18) 
+
+summary(svm1)
+
+# behaviour on the test set
+prediction <- predict(svm1, test_set)
+xtab <- table(test_set$y_true, prediction)
+xtab
+
+# compute all metrics on the test set predictions
+install.packages('mltest')
+library(mltest)
+
+# saved metrics
+base_svm <- ml_test(prediction, true_lab, output.as.table = FALSE)
+
+diagonal.counts <- diag(xtab)
+N <- sum(xtab)
+row.marginal.props <- rowSums(xtab)/N
+col.marginal.props <- colSums(xtab)/N
+# Compute kappa (k)
+Po <- sum(diagonal.counts)/N
+Pe <- sum(row.marginal.props*col.marginal.props)
+k <- (Po - Pe)/(1 - Pe)
+k
+
+########################## extended model - SVM
+svm1 = svm(formula = y_true ~ nose_dif +
+             neck_dif +
+             Rshoulder_dif +
+             Relbow_dif +
+             Rwrist_dif +
+             Lshoulder_dif +
+             Lelbow_dif +
+             Lwrist_dif +
+             MidHip_dif +
+             Rhip_dif +
+             LHip_dif +
+             REye_dif +
+             LEye_diff +
+             REar_diff +
+             LEar_diff +
+             mean +
+             YRshoulderWristDiff +
+             YLshoulderWristDiff +
+             RshoulderElbowAngle,
+           data = train_set,
+           type = 'C-classification', 
+           kernel = 'radial',
+           gamma = 0.1,
+           cost = 16) 
+
+summary(svm1)
+
+# behaviour on the test set
+prediction <- predict(svm1, test_set)
+xtab <- table(test_set$y_true, prediction)
+xtab
+
+diagonal.counts <- diag(xtab)
+N <- sum(xtab)
+row.marginal.props <- rowSums(xtab)/N
+col.marginal.props <- colSums(xtab)/N
+# Compute kappa (k)
+Po <- sum(diagonal.counts)/N
+Pe <- sum(row.marginal.props*col.marginal.props)
+k <- (Po - Pe)/(1 - Pe)
+k
+
+# compute all metrics on the test set predictions
+install.packages('mltest')
+library(mltest)
+
+# saved metrics
+extended_svm <- ml_test(prediction, true_lab, output.as.table = FALSE)
+
+############################################ metrics evaluation
+base_DT
+extended_DT
+base_svm
+extended_svm
+
+library(imputeTS)
+library(tidyverse)
+library(dplyr)
+
+# the cleaned dataset
+cleaned_set <- cleaned_body_parts
+
+# use mean imputation  
+cleaned_set <- na_mean(cleaned_set, "mean")
+
+####################################################### df body distance minimal
+# create distance for the nose dataset
+body_distance <- cleaned_set %>%
+  select(ID, x_Nose, y_Nose, 
+         x_Neck, y_neck,
+         x_RShoulder, y_RShoulder, 
+         x_RElbow, y_RElbow, 
+         x_RWrist, y_RWrist, 
+         x_LShoulder, y_LShoulder, 
+         x_LElbow, y_LElbow, 
+         x_LWrist, y_LWrist, 
+         x_MidHip, y_MidHip, 
+         x_RHip, y_RHip, 
+         x_LHip, y_LHip, 
+         x_REye, y_REye, 
+         x_LEye, y_LEye, 
+         x_REar, y_REar, 
+         x_LEar, y_LEar)
+
+removed_distance <- complete.cases(body_distance)
+i <- bind_cols(ID = ID_vec, dist_head = removed_distance)
+
+i <- i %>%
+  group_by(ID) %>%
+  mutate(amount_true = sum(dist_head == TRUE)) %>%
+  mutate(amount_false = sum(dist_head == FALSE)) %>%
+  select(ID, amount_true, amount_false) %>%
+  distinct() %>%
+  filter(amount_true < 1)
+
+# all nose values substracted by same ID 
+body_distance <- body_distance%>%
+  group_by(ID) %>%
+  mutate(row = row_number()) %>%
+  split(.$ID) %>%
+  map(
+    ~nest(., data = -c(ID, row)) %>%
+      list(.,.) %>%
+      reduce(full_join, by = "ID") %>%
+      rename(row1 = row.x, row2 = row.y, vec1 = data.x, vec2 = data.y) %>%
+      filter(row1 != row2) %>%
+      mutate(diff = map2(vec1, vec2, ~unlist(.x)-unlist(.y)))%>%
+      select(-vec1, -vec2) %>%
+      unnest_wider(col = diff)
+  ) %>%
+  bind_rows()
+
+
+body_distance <- body_distance %>%
+  mutate(x_Nose = x_Nose ^ 2, 
+         y_Nose = y_Nose ^ 2,
+         x_Neck = x_Neck ^ 2,
+         y_neck = y_neck ^ 2,
+         x_RShoulder = x_RShoulder ^ 2,
+         y_RShoulder = y_RShoulder ^ 2, 
+         x_RElbow = x_RElbow ^ 2, 
+         y_RElbow = y_RElbow ^ 2, 
+         x_RWrist = x_RWrist ^ 2, 
+         y_RWrist = y_RWrist ^ 2, 
+         x_LShoulder = x_LShoulder ^ 2, 
+         y_LShoulder = y_LShoulder ^ 2, 
+         x_LElbow = x_LElbow ^ 2, 
+         y_LElbow = y_LElbow ^ 2, 
+         x_LWrist = x_LWrist ^ 2, 
+         y_LWrist = y_LWrist ^ 2, 
+         x_MidHip = x_MidHip ^ 2, 
+         y_MidHip = y_MidHip ^ 2, 
+         x_RHip = x_RHip ^ 2, 
+         y_RHip = y_RHip ^ 2, 
+         x_LHip = x_LHip ^ 2, 
+         y_LHip = y_LHip ^ 2, 
+         x_REye = x_REye ^ 2,
+         y_REye = y_REye ^ 2,
+         x_LEye = x_LEye ^2,
+         y_LEye = y_LEye ^ 2, 
+         x_REar = x_REar ^ 2,
+         y_REar = y_REar ^ 2,
+         x_LEar = x_LEar ^ 2,
+         y_LEar = y_LEar ^ 2) %>%
+  mutate(nose_dif = x_Nose + y_Nose,
+         neck_dif = x_Neck + y_neck,
+         Rshoulder_dif = x_RShoulder + y_RShoulder,
+         Relbow_dif = x_RElbow + y_RElbow,
+         Rwrist_dif = x_RWrist + y_RWrist,
+         Lshoulder_dif = x_LShoulder + y_LShoulder,
+         Lelbow_dif = x_LElbow + y_LElbow, 
+         Lwrist_dif = x_LWrist + y_LWrist,
+         MidHip_dif = x_MidHip + y_MidHip,
+         Rhip_dif = x_RHip + y_RHip, 
+         LHip_dif = x_LHip + y_LHip,
+         REye_dif = x_REye + y_REye,
+         LEye_diff = x_LEye + y_LEye, 
+         REar_diff= x_REar + y_REar,
+         LEar_diff = x_LEar + y_LEar) %>%
+  mutate(nose_dif = sqrt(nose_dif),
+         neck_dif = sqrt(neck_dif),
+         Rshoulder_dif = sqrt(Rshoulder_dif),
+         Relbow_dif = sqrt(Relbow_dif),
+         Rwrist_dif = sqrt(Rwrist_dif),
+         Lshoulder_dif = sqrt(Lshoulder_dif),
+         Lelbow_dif = sqrt(Lelbow_dif),
+         Lwrist_dif = sqrt(Lwrist_dif),
+         MidHip_dif = sqrt(MidHip_dif),
+         Rhip_dif = sqrt(Rhip_dif),
+         LHip_dif = sqrt(LHip_dif),
+         REye_dif = sqrt(REye_dif),
+         LEye_diff = sqrt(LEye_diff), 
+         REar_diff= sqrt(REar_diff),
+         LEar_diff = sqrt(LEar_diff)) %>%
+  select(ID, 
+         nose_dif, 
+         neck_dif, 
+         Rshoulder_dif,
+         Relbow_dif,
+         Rwrist_dif,
+         Lshoulder_dif,
+         Lelbow_dif,
+         Lwrist_dif,
+         MidHip_dif,
+         Rhip_dif,
+         LHip_dif,
+         REye_dif, 
+         LEye_diff, 
+         REar_diff,
+         LEar_diff)
+
+body_distance[body_distance == 0] <- NA
+
+#impute NaN with mean
+body_distance <- na_mean(body_distance, "mean")
+
+body_distance$mean= rowMeans(body_distance[,2:16], na.rm=TRUE)
+
+body_distance <- body_distance %>%
+  group_by(ID) %>%
+  slice(which.min(mean))
+
+no_dist <- cleaned_body_parts %>%
+  select(ID) %>%
+  group_by(ID) %>%
+  distinct()
+
+no_dist <- no_dist[c(73, 74, 85, 102, 109, 114, 116, 117, 121, 122,  124, 133, 
+                     134, 142, 146, 152, 165, 176, 203, 204, 209, 210, 217, 
+                     222, 224, 227, 230, 231, 232, 233, 234, 235, 245, 246, 
+                     249, 262, 265, 289, 292, 295),]
+
+no_dist['no_dist'] <- NA
+x<- rbind(body_distance, no_dist)
+
+x <- x %>%
+  arrange(ID)
+
+body_distance <- x %>%
+  ungroup()
+
+body_distance[] <- lapply(body_distance, function(x) { 
+  x[is.na(x)] <- mean(x, na.rm = TRUE)
+  x
+})
+
+########################################################### difference dataframe
+body_distance <- body_distance %>%
+  select(ID,
+         nose_dif,
+         neck_dif,
+         Rshoulder_dif,
+         Relbow_dif, 
+         Rwrist_dif, 
+         Lshoulder_dif,
+         Lelbow_dif,
+         Lwrist_dif,
+         MidHip_dif,
+         Rhip_dif,
+         LHip_dif,
+         REye_dif, 
+         LEye_diff, 
+         REar_diff,
+         LEar_diff,
+         mean)
+
+####################################################  right shoulder elbow angle
+# for the right elbow and right shoulder
+angles <- cleaned_body_parts %>%
+  select(ID, x_RShoulder, y_RShoulder, x_RElbow, y_RElbow, x_RWrist, y_RWrist)
+
+removed_angles <- complete.cases(angles)
+i <- bind_cols(ID = ID_vec, angles = removed_angles)
+
+i <- i %>%
+  group_by(ID) %>%
+  mutate(amount_true = sum(angles == TRUE)) %>%
+  mutate(amount_false = sum(angles == FALSE)) %>%
+  select(ID, amount_true, amount_false) %>%
+  distinct() %>%
+  filter(amount_true < 1)
+
+#computing the angle of a which should be the elbow
+# a = elbow
+# b = shoulder
+# c = wrist
+angles <- angles %>%
+  na.omit(angles) %>%
+  mutate(a = sqrt(((x_RShoulder - x_RWrist)^2) + ((y_RShoulder - y_RWrist)^2))) %>%
+  mutate(b = sqrt(((x_RElbow - x_RWrist)^2) + ((y_RElbow - y_RWrist)^2))) %>%
+  mutate(c = sqrt(((x_RElbow - x_RShoulder)^2) + ((y_RElbow - y_RShoulder)^2))) %>%
+  mutate(a2 = a^2) %>%
+  mutate(b2 = b^2) %>%
+  mutate(c2 = c^2) %>%
+  mutate(cosA = ((b2+c2-a2) / (2*b*c))) %>%
+  mutate(rad = acos(cosA)) %>%
+  mutate(angle_degrees = rad * (180/pi)) %>%
+  select(ID, angle_degrees)%>%
+  group_by(ID) %>%
+  slice(which.min(angle_degrees))
+
+no_angles <- cleaned_body_parts %>%
+  select(ID) %>%
+  group_by(ID) %>%
+  distinct()
+
+no_angles <- no_angles[c(42, 100, 105, 111, 117, 122, 130, 133, 134, 136, 137, 
+                         142, 146, 151, 152, 153, 155, 161, 165, 167, 169, 
+                         176, 177, 180, 181, 182, 184, 187, 189, 199, 209, 
+                         222, 225, 233, 244, 246, 248, 250, 261, 262, 263, 
+                         266, 267, 272, 285),]
+
+no_angles['angle_degrees'] <- NA
+x<- rbind(angles, no_angles)
+x <- x %>%
+  arrange(ID) %>%
+  ungroup() %>%
+  select(RshoulderElbowAngle = angle_degrees)
+
+rShoulderElbowAngle <- x
+
+########################################### for the left elbow and left shoulder
+angles <- cleaned_body_parts %>%
+  select(ID, x_LShoulder, y_LShoulder, x_LElbow, y_LElbow, x_LWrist, y_LWrist)
+
+removed_angles <- complete.cases(angles)
+i <- bind_cols(ID = ID_vec, angles = removed_angles)
+
+i <- i %>%
+  group_by(ID) %>%
+  mutate(amount_true = sum(angles == TRUE)) %>%
+  mutate(amount_false = sum(angles == FALSE)) %>%
+  select(ID, amount_true, amount_false) %>%
+  distinct() %>%
+  filter(amount_true < 1)
+
+#computing the angle of a which should be the elbow
+# a = elbow
+# b = shoulder
+# c = wrist
+angles <- angles %>%
+  na.omit(angles) %>%
+  mutate(a = sqrt(((x_LShoulder - x_LWrist)^2) + ((y_LShoulder - y_LWrist)^2))) %>%
+  mutate(b = sqrt(((x_LElbow - x_LWrist)^2) + ((y_LElbow - y_LWrist)^2))) %>%
+  mutate(c = sqrt(((x_LElbow - x_LShoulder)^2) + ((y_LElbow - y_LShoulder)^2))) %>%
+  mutate(a2 = a^2) %>%
+  mutate(b2 = b^2) %>%
+  mutate(c2 = c^2) %>%
+  mutate(cosA = ((b2+c2-a2) / (2*b*c))) %>%
+  mutate(rad = acos(cosA)) %>%
+  mutate(angle_degrees = rad * (180/pi)) %>%
+  select(ID, angle_degrees)%>%
+  group_by(ID) %>%
+  slice(which.min(angle_degrees))
+
+no_angles <- cleaned_body_parts %>%
+  select(ID) %>%
+  group_by(ID) %>%
+  distinct()
+
+no_angles <- no_angles[c(12, 17, 34, 43, 51, 52, 68, 73, 74, 85, 92, 94, 103, 
+                         104, 114, 115, 127, 132, 133, 142, 143, 151, 152, 153, 
+                         154, 155, 161, 165, 170, 171, 176, 177, 180, 181, 182, 
+                         183, 184, 185, 187, 192, 199, 200, 209, 220, 231, 233
+                         , 235, 236, 239, 241, 244, 248, 249, 250, 255, 259, 
+                         263, 265, 266, 277, 279),]
+
+no_angles['angle_degrees'] <- NA
+x<- rbind(angles, no_angles)
+x <- x %>%
+  arrange(ID) %>%
+  ungroup() %>%
+  select(lshoulderElbowAngle = angle_degrees)
+
+lShoulderElbowAngle <- x
+
+rm(angles)
+rm(no_angles)
+rm(i)
+rm(x)
+
+############################################################### Add to dataframe
+
+body_distance <- body_distance %>%
+  add_column(RshoulderElbowAngle = rShoulderElbowAngle$RshoulderElbowAngle) %>%
+  add_column(lshoulderElbowAngle = lShoulderElbowAngle$lshoulderElbowAngle) %>%
+  select(nose_dif, 
+         neck_dif, 
+         Rshoulder_dif, 
+         Relbow_dif, 
+         Rwrist_dif, 
+         Lshoulder_dif, 
+         Lelbow_dif, 
+         Lwrist_dif, 
+         MidHip_dif, 
+         Rhip_dif, 
+         LHip_dif, 
+         REye_dif, 
+         LEye_diff, 
+         REar_diff, 
+         LEar_diff, 
+         mean, 
+         RshoulderElbowAngle, 
+         lshoulderElbowAngle) %>%
+  add_column(YRshoulderWristDiff) %>%
+  add_column(YLshoulderWristDiff) %>%
+  add_column(y_true)
+
+body_distance[] <- lapply(body_distance, function(x) { 
+  x[is.na(x)] <- mean(x, na.rm = TRUE)
+  x
+})
+
+############################################################## 
+# install and load the packages
+install.packages("rpart")
+install.packages("caret", dependencies = TRUE)
+library(rpart)
+library(caret)
+
+#create a train and test set
+train_set <- body_distance
+test_set <- body_distance
+
+# convert outcome variable from characters to numbers
+train_set <- train_set %>%
+  mutate(y_true = case_when(
+    y_true == 'handShake'  ~ 0,
+    y_true == 'highFive'  ~ 1,
+    y_true == 'hug'  ~ 2,
+    y_true == 'kiss' ~ 3,
+    y_true == 'negative' ~ 4))
+
+test_set <- test_set %>%
+  mutate(y_true = case_when(
+    y_true == 'handShake'  ~ 0,
+    y_true == 'highFive'  ~ 1,
+    y_true == 'hug'  ~ 2,
+    y_true == 'kiss' ~ 3,
+    y_true == 'negative' ~ 4))
+
+
+train_set <- train_set[c(1, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 17, 22, 23, 
+                         29, 30, 31, 33, 34, 35, 36, 37, 38, 39, 52, 53, 54, 
+                         55, 64, 65, 66, 67, 68, 69, 70, 71, 72, 76, 86, 87, 
+                         88, 89, 90, 91, 92, 93, 96, 99, 100, 101, 105, 106, 
+                         107, 108, 109, 110, 113, 114, 119, 122, 123, 124,
+                         125, 126, 128, 137, 138, 139, 140, 141, 143, 145,
+                         147, 148, 152, 153, 154, 155, 156, 165, 169, 170, 
+                         171, 175, 177, 178, 180, 182, 183, 184, 187, 193,
+                         194, 195, 196, 197, 198, 199, 200),]
+
+test_set <-test_set[ c(2, 14, 15, 16, 18, 19, 20, 21, 24, 25, 26, 27, 28, 32, 
+                       40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 56, 57,
+                       58, 59, 60, 61, 62, 63, 73, 74, 75, 77, 78, 79, 80, 81,
+                       82, 83, 84, 85, 94, 95, 97, 98, 102, 103, 104, 111, 112, 
+                       115, 116, 117, 118, 120, 121, 127, 129, 130, 131, 132, 
+                       133, 134, 135, 136, 142, 144, 146, 149, 150, 151, 157, 
+                       158, 159, 160, 161, 162, 163, 164, 166, 167, 168, 
+                       172, 173, 174, 176, 179, 181, 185, 186, 188, 189, 190, 
+                       191, 192),]
+
+
+
+train_set$y_true <- as.character(train_set$y_true)
+train_set$y_true <- as.factor(train_set$y_true)
+
+test_set$y_true <- as.character(test_set$y_true)
+test_set$y_true <- as.factor(test_set$y_true)
+
+################################################### feature selection
+install.packages('Boruta')
+library(Boruta)
+boruta_output <- Boruta(y_true ~ 
+                          nose_dif + 
+                          neck_dif + 
+                          Rshoulder_dif +
+                          Relbow_dif +
+                          Rwrist_dif +  
+                          Lshoulder_dif + 
+                          Lelbow_dif +
+                          Lwrist_dif + 
+                          MidHip_dif + 
+                          Rhip_dif + 
+                          LHip_dif + 
+                          REye_dif + 
+                          LEye_diff + 
+                          REar_diff + 
+                          LEar_diff + 
+                          mean +
+                          RshoulderElbowAngle+
+                          lshoulderElbowAngle+
+                          YRshoulderWristDiff +
+                          YLshoulderWristDiff, 
+                        data=na.omit(train_set), doTrace=0)  
+boruta_signif <- getSelectedAttributes(boruta_output, withTentative = TRUE)
+print(boruta_signif)
+
+
+roughFixMod <- TentativeRoughFix(boruta_output)
+boruta_signif <- getSelectedAttributes(roughFixMod)
+print(boruta_signif)
+
+
+borplot <- plot(boruta_output, 
+                cex.axis=.7, 
+                las=2, 
+                xlab="", 
+                main="Variable Importance")  
+
+
+
+# features that will not be used in the decision tree 
+# Relbow_dif, Lwrist_dif, LHip_dif, LEar_diff, lshoulderElbowAngle, RshoulderElbowAngle
+
+######################### run the decision tree model ##########################
+gs <- list(minsplit = c(2, 4, 5, 8, 10),
+           maxdepth = c(1, 3,4, 5,6)) %>% 
+  cross_df() # Convert to data frame grid
+gs
+
+model <- function(...){
+  rpart(formula = y_true ~ nose_dif +
+          neck_dif +
+          Rshoulder_dif +
+          Relbow_dif +
+          Rwrist_dif +
+          Lshoulder_dif +
+          MidHip_dif +
+          Rhip_dif +
+          LHip_dif +
+          REye_dif +
+          LEye_diff +
+          REar_diff +
+          LEar_diff + 
+          mean +
+          lshoulderElbowAngle +
+          YRshoulderWristDiff +
+          YLshoulderWristDiff,
+        data = train_set,
+        control = rpart.control(...))
+}
+
+gs <- gs %>% mutate(fit = pmap(gs, model))
+gs
+
+compute_accuracy <- function(fit, test_features, test_labels) {
+  predicted <- predict(fit, test_features, type = "class")
+  mean(predicted == test_labels)
+}
+
+test_features <- test_set %>% select(-y_true)
+test_labels   <- test_set$y_true
+gs <- gs %>%
+  mutate(test_accuracy = map_dbl(fit, compute_accuracy,
+                                 test_features, test_labels))
+gs
+
+gs <- gs %>% arrange(desc(test_accuracy), desc(minsplit), maxdepth)
+gs
+
+############################### base model
+model <- rpart(formula = y_true ~ nose_dif +
+                 neck_dif +
+                 Rshoulder_dif +
+                 Relbow_dif +
+                 Rwrist_dif +
+                 Lshoulder_dif +
+                 MidHip_dif +
+                 Rhip_dif +
+                 LHip_dif +
+                 REye_dif +
+                 LEye_diff +
+                 REar_diff +
+                 LEar_diff + 
+                 mean +
+                 lshoulderElbowAngle +
+                 YRshoulderWristDiff +
+                 YLshoulderWristDiff,
+               data = train_set, 
+               method = "class",
+               minsplit = 5,
+               maxdepth = 6,
+               parms = list(split = 'information'))
+
+#predict on the test cases
+test_set$pred <- predict(object = model,  
+                         newdata = test_set,   
+                         type = "class")
+# saved metrics
+base_DT_4 <- confusionMatrix(table(test_set$y_true, test_set$pred))
+
+################################################################ SVM
+
+########################### SVM tuning
+install.packages('e1071') 
+library(e1071) 
+
+#tuning
+svm_model1 <- tune(svm , y_true ~ nose_dif +
+                     neck_dif +
+                     Rshoulder_dif +
+                     Relbow_dif +
+                     Rwrist_dif +
+                     Lshoulder_dif +
+                     MidHip_dif +
+                     Rhip_dif +
+                     LHip_dif +
+                     REye_dif +
+                     LEye_diff +
+                     REar_diff +
+                     LEar_diff + 
+                     mean +
+                     lshoulderElbowAngle +
+                     YRshoulderWristDiff +
+                     YLshoulderWristDiff,
+                   data = train_set, 
+                   kernel = "radial" , 
+                   type = "C-classification", 
+                   ranges = list(gamma = c(0.1, 0.001), 
+                                 cost = c(10:100)))
+
+summary(svm_model1)
+
+########################## base model  - SVM
+svm1 = svm(formula = y_true ~ nose_dif +
+             neck_dif +
+             Rshoulder_dif +
+             Relbow_dif +
+             Rwrist_dif +
+             Lshoulder_dif +
+             MidHip_dif +
+             Rhip_dif +
+             LHip_dif +
+             REye_dif +
+             LEye_diff +
+             REar_diff +
+             LEar_diff + 
+             mean +
+             lshoulderElbowAngle +
+             YRshoulderWristDiff +
+             YLshoulderWristDiff,
+           data = train_set,
+           type = 'C-classification', 
+           kernel = 'radial',
+           gamma = 0.1,
+           cost = 15) 
+
+summary(svm1)
+
+# behaviour on the test set
+prediction <- predict(svm1, test_set)
+xtab <- table(test_set$y_true, prediction)
+xtab
+
+# compute all metrics on the test set predictions
+install.packages('mltest')
+library(mltest)
+
+# saved metrics
+base_svm_4 <- ml_test(prediction, test_set$y_true , output.as.table = FALSE)
+
+
+diagonal.counts <- diag(xtab)
+N <- sum(xtab)
+row.marginal.props <- rowSums(xtab)/N
+col.marginal.props <- colSums(xtab)/N
+# Compute kappa (k)
+Po <- sum(diagonal.counts)/N
+Pe <- sum(row.marginal.props*col.marginal.props)
+k <- (Po - Pe)/(1 - Pe)
+k
