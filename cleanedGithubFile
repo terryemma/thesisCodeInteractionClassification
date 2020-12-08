@@ -445,11 +445,9 @@ shoulder_elbow_L <- sum_size_yL$sumY_lElbow_lShoulder
 
 #for the right shoulder and elbow
 RshoudlerElbowDifference_sum <- as.data.frame(shoulder_elbow_R)
-RshoudlerElbowDifference_sum[RshoudlerElbowDifference_sum == 0] <- NA
 
 #for the left shoulder and elbow
 LshoudlerElbowDifference_sum <- as.data.frame(shoulder_elbow_L)
-LshoudlerElbowDifference_sum[LshoudlerElbowDifference_sum == 0] <- NA
 
 rm(elbow_shoulder_df)
 rm(sum_size_yL)
