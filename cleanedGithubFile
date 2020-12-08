@@ -353,7 +353,11 @@ least_body_distance <- body_distance %>%
   slice(which.min(mean))
 
 ####
-# for least body distance the varbiable to use is; least_body_distance
+# for least body distance the varbiable to use is: 
+#                                                 least_body_distance
+# for further computations with only the rows of two persons having least
+# body distance use: 
+#                   body_distance
 
 ##################### Feature right shoulder elbow angle ######################
 # for the right elbow and right shoulder
