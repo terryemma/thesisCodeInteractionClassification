@@ -183,8 +183,8 @@ impute_missing_df.imp$OOBerror #the error of the forest
 imputed_missing_df <- impute_missing_df.imp$ximp %>%
   add_column(ID = i, .before = 1) 
 
-####################################################### df body distance minimal
-# create distance for the nose dataset
+####################### df body distance minimal ##############################
+# extract the variables that will be used for this research into a new dataframe
 body_distance <- imputed_missing_df %>%
   select(ID, x_Nose, y_Nose, 
          x_Neck, y_neck,
@@ -355,7 +355,7 @@ least_body_distance <- body_distance %>%
 ####
 # for least body distance the varbiable to use is; least_body_distance
 
-####################################################  right shoulder elbow angle
+##################### Feature right shoulder elbow angle ######################
 # for the right elbow and right shoulder
 angles <- body_distance %>%
   select(ID, x_RShoulder, y_RShoulder, x_RElbow, y_RElbow, x_RWrist, y_RWrist)
@@ -387,7 +387,7 @@ rShoulderElbowAngle <- angles %>%
 
 ### the variable for the right shoulder elbow angle is rShoulderElbowAngle
 
-########################################### for the left elbow and left shoulder
+################# Feature for the left elbow and left shoulder #################
 angles <- body_distance %>%
   select(ID, x_LShoulder, y_LShoulder, x_LElbow, y_LElbow, x_LWrist, y_LWrist)
 
@@ -419,7 +419,7 @@ lShoulderElbowAngle <- angles %>%
 rm(angles)
 rm(i)
 
-#####################  right shoulderWristDiff #################################
+#######################  right shoulder Wrist Diff #############################
 elbow_shoulder_df <- body_distance %>%
   select(ID, y_RElbow, y_RShoulder, y_LElbow, y_LShoulder)
 
@@ -452,7 +452,7 @@ rm(sum_size_yL)
 rm(shoulder_elbow_R)
 rm(sum_size_yR)
 
-############################################################### Add to dataframe
+#################### Add all features to the dataframe #########################
 least_body_distance <- least_body_distance %>%
   ungroup() %>%
   add_column(RshoulderElbowAngle = rShoulderElbowAngle$angle_degrees) %>%
@@ -481,7 +481,11 @@ least_body_distance <- least_body_distance %>%
          mean) %>%
   add_column(y_true)
 
-############################################################## 
+###############################################################################
+################ for the first check with negative class ######################
+###############################################################################
+
+###################### creating a train and test set ###########################
 #create a train and test set
 train_set <- least_body_distance
 test_set <- least_body_distance
@@ -541,7 +545,7 @@ train_set$y_true <- as.factor(train_set$y_true)
 test_set$y_true <- as.character(test_set$y_true)
 test_set$y_true <- as.factor(test_set$y_true)
 
-################################################### feature selection
+################# feature selection with Boruta ################################
 boruta_output <- Boruta(y_true ~ 
                           nose_dif + 
                           neck_dif + 
@@ -628,7 +632,7 @@ gs
 gs <- gs %>% arrange(desc(test_accuracy), desc(minsplit), maxdepth)
 gs
 
-############################### base model
+# Run the base model
 model <- rpart(formula = y_true ~ nose_dif +
                  neck_dif +
                  Rshoulder_dif +
@@ -661,7 +665,7 @@ test_set$pred <- predict(object = model,
 # saved metrics
 base_DT <- confusionMatrix(table(test_set$y_true, test_set$pred))
 
-# tuning the paramters for the extended model decision tree
+# tuning the parameters for the extended model decision tree
 gs <- list(minsplit = c(1:50),
            maxdepth = c(1:30)) %>% 
   cross_df() # Convert to data frame grid
@@ -712,7 +716,7 @@ gs
 gs <- gs %>% arrange(desc(test_accuracy), desc(minsplit), maxdepth)
 gs
 
-##################################### extended model
+# train the extended model
 model <- rpart(formula = y_true ~ nose_dif +
                  neck_dif +
                  Rshoulder_dif +
@@ -899,7 +903,7 @@ k
 extended_svm <- ml_test(prediction, true_lab, output.as.table = FALSE)
 
 ###############################################################################
-################### for the seccond check no negative #########################
+############### for the seccond check no negative class #######################
 ###############################################################################
 
 #create a train and test set
