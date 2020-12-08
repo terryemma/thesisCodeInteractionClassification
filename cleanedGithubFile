@@ -1,6 +1,8 @@
 ############################# necessary packages ###############################
 library(imputeTS)
 library(tidyverse)
+library(tidyr)
+library(tibble)
 library(dplyr)
 library(rpart)
 library(pROC)
@@ -8,15 +10,15 @@ library(lattice)
 library(caret)
 library(ggplot2)
 library(mi)
-library(missForest)
 library(itertools)
 library(foreach)
+library(iterators)
+library(missForest)
 library(mice)
 library(purrr)
 library(Boruta)
 library(mltest)
-library(e1071) 
-
+library(e1071)
 
 ########################### loading in the json files ##########################
 json_files <- list.files(pattern = "*.json")
@@ -291,37 +293,12 @@ body_distance <- body_distance %>%
          REar_diff= sqrt(REar_diff),
          LEar_diff = sqrt(LEar_diff)) 
 
+# create a dataframe of all differences including row1 which consists of
+# the two row numbers within the same ID that were used to compute the 
+# euclidean distance between all combinations of people in the frame 
 body_distance <- body_distance %>%
   select(ID, 
-         x_Nose,
-         y_Nose,
-         x_Neck,
-         y_neck,
-         x_RShoulder,
-         y_RShoulder,
-         x_RElbow, 
-         y_RElbow, 
-         x_RWrist, 
-         y_RWrist, 
-         x_LShoulder, 
-         y_LShoulder, 
-         x_LElbow, 
-         y_LElbow, 
-         x_LWrist, 
-         y_LWrist, 
-         x_MidHip, 
-         y_MidHip, 
-         x_RHip, 
-         y_RHip, 
-         x_LHip, 
-         y_LHip, 
-         x_REye,
-         y_REye,
-         x_LEye,
-         y_LEye,
-         x_REar,
-         y_REar,
-         x_LEar,
+         id = row1,
          nose_dif, 
          neck_dif, 
          Rshoulder_dif,
@@ -338,16 +315,36 @@ body_distance <- body_distance %>%
          REar_diff,
          LEar_diff)
 
+# compute the mean of all distance body measures per row
+body_distance$mean= rowMeans(body_distance[,3:17], na.rm=TRUE)
 
-body_distance <- na_mean(body_distance, "mean")
-body_distance$mean= rowMeans(body_distance[,31:45], na.rm=TRUE)
-
-# arrange the dataframe by group and by value
+# arrange the dataframe by group and by value and extract of every ID
+# the two persons with the least distance between them
 body_distance <- body_distance %>%
   group_by(ID) %>%
   arrange(mean, .by_group = TRUE) %>%
   top_n(-2, mean)
 
+# get another dataframe with the locations of the x and y body parts
+i <- imputed_missing_df%>% 
+  group_by(ID) %>% 
+  mutate(id = row_number())
+
+# making sure the order of all body parts remains the same 
+col_order <- c("ID", "id", "x_Nose", "y_Nose", "x_Neck", "y_neck", "x_RShoulder",
+               "y_RShoulder", "x_RElbow", "y_RElbow", "x_RWrist", "y_RWrist",
+               "x_LShoulder", "y_LShoulder", "x_LElbow", "y_LElbow", "x_LWrist",    
+               "y_LWrist", "x_MidHip", "y_MidHip", "x_RHip", "y_RHip", "x_LHip",
+               "y_LHip", "x_REye", "y_REye", "x_LEye", "y_LEye", "x_REar",
+               "y_REar", "x_LEar", "y_LEar")
+
+#giving the order set above to the i dataframe 
+i <- i[, col_order]
+
+# joining the dataframes body distance and i together. By doing so we made
+# sure that only the values of those who had the least body distance 
+# were kept for further computations
+body_distance <- inner_join(body_distance, i, by = c("ID", "id"))
 
 # for the least difference just keep one of the two row mean values since 
 # they are the same
@@ -357,24 +354,6 @@ least_body_distance <- body_distance %>%
 
 ####
 # for least body distance the varbiable to use is; least_body_distance
-
-########################################################### difference dataframe
-body_distance <- imputed_missing_df %>%
-  select(ID, x_Nose, y_Nose, 
-         x_Neck, y_neck,
-         x_RShoulder, y_RShoulder, 
-         x_RElbow, y_RElbow, 
-         x_RWrist, y_RWrist, 
-         x_LShoulder, y_LShoulder, 
-         x_LElbow, y_LElbow, 
-         x_LWrist, y_LWrist, 
-         x_MidHip, y_MidHip, 
-         x_RHip, y_RHip, 
-         x_LHip, y_LHip, 
-         x_REye, y_REye, 
-         x_LEye, y_LEye, 
-         x_REar, y_REar, 
-         x_LEar, y_LEar)
 
 ####################################################  right shoulder elbow angle
 # for the right elbow and right shoulder
@@ -438,9 +417,7 @@ lShoulderElbowAngle <- angles %>%
   select(angle_degrees)
 
 rm(angles)
-rm(no_angles)
 rm(i)
-rm(x)
 
 #####################  right shoulderWristDiff #################################
 elbow_shoulder_df <- body_distance %>%
@@ -672,7 +649,7 @@ model <- rpart(formula = y_true ~ nose_dif +
                  YLshoulderWristDiff,
                data = train_set, 
                method = "class",
-               minsplit = 45,
+               minsplit = 50,
                maxdepth = 2,
                parms = list(split = 'information'))
 
@@ -680,6 +657,7 @@ model <- rpart(formula = y_true ~ nose_dif +
 test_set$pred <- predict(object = model,  
                          newdata = test_set,   
                          type = "class")
+
 # saved metrics
 base_DT <- confusionMatrix(table(test_set$y_true, test_set$pred))
 
@@ -757,7 +735,7 @@ model <- rpart(formula = y_true ~ nose_dif +
                  lshoulderElbowAngle,
                data = train_set, 
                method = "class",
-               minsplit = 45,
+               minsplit = 50,
                maxdepth = 2,
                parms = list(split = 'information'))
 
@@ -822,7 +800,7 @@ svm1 = svm(formula = y_true ~ nose_dif +
            type = 'C-classification', 
            kernel = 'radial',
            gamma = 0.1,
-           cost = 11) 
+           cost = 10) 
 
 summary(svm1)
 
@@ -898,7 +876,7 @@ svm1 = svm(formula = y_true ~ nose_dif +
            type = 'C-classification', 
            kernel = 'radial',
            gamma = 0.1,
-           cost = 18) 
+           cost = 20) 
 
 summary(svm1)
 
@@ -1081,7 +1059,7 @@ model <- rpart(formula = y_true ~ nose_dif +
                data = train_set, 
                method = "class",
                minsplit = 10,
-               maxdepth = 4,
+               maxdepth = 3,
                parms = list(split = 'information'))
 
 #predict on the test cases
@@ -1141,7 +1119,7 @@ svm1 = svm(formula = y_true ~ nose_dif +
            type = 'C-classification', 
            kernel = 'radial',
            gamma = 0.001,
-           cost = 92) 
+           cost = 79) 
 
 summary(svm1)
 
