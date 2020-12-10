@@ -116,6 +116,14 @@ rm(nr_people)
 cleaned_set <- cleaned_body_parts
 
 ###################### giving na values to missing rows ########################
+# used another dataframe which could be used to extract the rows that had
+# one row, zo measured only one person, per frame. Give those rows
+# NA values on all collumns that are used for this research and add them
+# to the original dataframe. So now all 300 frames in the dataset had at least
+# two rows available. Where those who only measured one person before, now had
+# two rows where one of them consisted of NA values on all columns. 
+# with this they could be imputed later on.
+
 no_dist <- cleaned_body_parts %>%
   select(ID) %>%
   group_by(ID) %>%
