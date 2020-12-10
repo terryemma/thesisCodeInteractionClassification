@@ -970,11 +970,11 @@ test_set <-test_set[ c(2, 14, 15, 16, 18, 19, 20, 21, 24, 25, 26, 27, 28, 32,
                        191, 192),]
 
 
-train_set$y_true <- as.character(train_set$y_true)
+train_set$y_true <- as.factor(train_set$y_true)
 Validation_set$y_true <- as.factor(Validation_set$y_true)
 train_set$y_true <- as.factor(train_set$y_true)
 
-test_set$y_true <- as.character(test_set$y_true)
+test_set$y_true <- as.factor(test_set$y_true)
 Validation_set$y_true <- as.factor(Validation_set$y_true)
 test_set$y_true <- as.factor(test_set$y_true)
 
